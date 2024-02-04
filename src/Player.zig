@@ -74,8 +74,13 @@ fn shoot(self: *Player) void {
         return;
     };
     self.t_shoot_cooldown = 15;
-    _ = Bullet.create(self.allocator, self.game_object.game_state, self.game_object.x, self.game_object.y - 8, self.input.player, dir) catch {
-        tic80.trace("oom?");
+    _ = Bullet.create(self.allocator, self.game_object.game_state, self.game_object.x, self.game_object.y - 8, self.input.player, dir) catch |err| {
+        switch (err) {
+            error.TooMany => {},
+            error.OutOfMemory => {
+                tic80.trace("oom?");
+            },
+        }
         return;
     };
 }
