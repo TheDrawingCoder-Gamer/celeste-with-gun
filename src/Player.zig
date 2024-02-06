@@ -24,6 +24,8 @@ spr: i32 = 512,
 input: *Input,
 t_shoot_cooldown: u8 = 0,
 allocator: std.mem.Allocator,
+t_fire_pose: u8 = 0,
+fire_dir: Bullet.Direction = .up,
 
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input) !*Player {
     var obj = GameObject.create(state, x, y);
@@ -74,7 +76,15 @@ fn shoot(self: *Player) void {
         return;
     };
     self.t_shoot_cooldown = 15;
-    _ = Bullet.create(self.allocator, self.game_object.game_state, self.game_object.x, self.game_object.y - 8, self.input.player, dir) catch |err| {
+    self.t_fire_pose = 8;
+    self.fire_dir = dir;
+    const x_offset: i32 =
+        switch (dir) {
+        .up, .down => -4,
+        .left => -8,
+        .right => 0,
+    };
+    _ = Bullet.create(self.allocator, self.game_object.game_state, self.game_object.x + x_offset, self.game_object.y - 8, self.input.player, dir) catch |err| {
         switch (err) {
             error.TooMany => {},
             error.OutOfMemory => {
@@ -117,7 +127,9 @@ pub fn update(self: *Player) void {
             self.t_jump_grace -= 1;
     }
     if (self.t_shoot_cooldown > 0)
-        self.t_shoot_cooldown = 0;
+        self.t_shoot_cooldown -= 1;
+    if (self.t_fire_pose > 0)
+        self.t_fire_pose -= 1;
     var sliding = false;
     switch (self.state) {
         .normal => {
@@ -173,15 +185,6 @@ pub fn update(self: *Player) void {
             if (self.input.input_action_pressed > 0) {
                 if (self.t_shoot_cooldown == 0) {
                     self.shoot();
-                    self.shoot();
-                    self.shoot();
-                    self.shoot();
-                    self.shoot();
-                    self.shoot();
-                    self.shoot();
-                    self.shoot();
-                    self.shoot();
-                    self.shoot();
                 }
             }
         },
@@ -190,7 +193,13 @@ pub fn update(self: *Player) void {
     _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
     _ = vtable.move_y(self, self.game_object.speed_y, @ptrCast(&on_collide_y));
 
-    if (!on_ground) {
+    if (self.t_fire_pose > 0) {
+        self.spr = switch (self.fire_dir) {
+            .right, .left => 527,
+            .up => 528,
+            .down => 529,
+        };
+    } else if (!on_ground) {
         if (sliding) {
             self.spr = 522;
         } else {

@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
+    const buddy2_mod = b.addModule("buddy2", .{ .root_source_file = .{ .path = "vendor/zig-buddy2/src/buddy2.zig" } });
     const target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
     const exe = b.addExecutable(.{
         .name = "cart",
@@ -11,6 +12,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
+    exe.root_module.addImport("buddy2", buddy2_mod);
     exe.rdynamic = true;
     exe.entry = .disabled;
     exe.import_memory = true;

@@ -1,0 +1,3 @@
+[submodule "vendor/zig-buddy2"]
+	path = vendor/zig-buddy2
+	url = https://github.com/TheDrawingCoder-Gamer/zig-buddy2.git

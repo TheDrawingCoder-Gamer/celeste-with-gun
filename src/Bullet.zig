@@ -58,14 +58,8 @@ fn die_on_collide(self: *Bullet, moved: i32, target: i32) bool {
     return true;
 }
 pub fn update(self: *Bullet) void {
-    switch (self.direction) {
-        .left, .right => {
-            _ = vtable.move_x(self, @floatFromInt(self.direction.axis_x()), @ptrCast(&die_on_collide));
-        },
-        .up, .down => {
-            _ = vtable.move_y(self, @floatFromInt(self.direction.axis_y()), @ptrCast(&die_on_collide));
-        },
-    }
+    _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&die_on_collide));
+    _ = vtable.move_y(self, self.game_object.speed_y, @ptrCast(&die_on_collide));
 }
 
 fn get_object(self: *Bullet) *GameObject {
@@ -77,8 +71,10 @@ pub fn create(allocator: std.mem.Allocator, state: *GameState, x: i32, y: i32, p
     var obj = GameObject.create(state, x, y);
     obj.hit_w = 4;
     obj.hit_h = 4;
-    obj.hit_x = -2;
-    obj.hit_y = -4;
+    obj.hit_x = 0;
+    obj.hit_y = 0;
+    obj.speed_x = @floatFromInt(@as(i32, dir.axis_x()) * 4);
+    obj.speed_y = @floatFromInt(@as(i32, dir.axis_y()) * 4);
     const self = try allocator.create(Bullet);
     self.player = player;
     self.game_object = obj;
