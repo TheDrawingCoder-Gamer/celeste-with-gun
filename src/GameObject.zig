@@ -96,6 +96,8 @@ id: i64,
 destroyed: bool = false,
 game_state: *GameState,
 destructable: bool = false,
+// will never be freed on cleanup
+persistent: bool = false,
 
 pub fn overlaps(self: *GameObject, btable: IsGameObject, ox: i32, oy: i32) bool {
     const b = btable.obj();
@@ -187,4 +189,7 @@ fn destroy(self: *GameObject, alloc: Allocator) void {
     _ = alloc;
 }
 
+pub fn debug_draw_hitbox(self: *GameObject) void {
+    tic80.rectb(self.x + self.hit_x, self.y + self.hit_y, self.hit_w, self.hit_h, 1);
+}
 pub const vtable: VTable = .{ .get_object = @ptrCast(&identity), .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .destroy = @ptrCast(&destroy) };

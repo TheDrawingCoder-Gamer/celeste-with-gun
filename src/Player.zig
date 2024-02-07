@@ -26,29 +26,25 @@ t_shoot_cooldown: u8 = 0,
 allocator: std.mem.Allocator,
 t_fire_pose: u8 = 0,
 fire_dir: Bullet.Direction = .up,
+t_death: u8 = 0,
 
-pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input) !*Player {
+pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input) !Player {
     var obj = GameObject.create(state, x, y);
-    obj.x += 4;
-    obj.y += 8;
-    obj.hit_x = -3;
-    obj.hit_y = -6;
+    // obj.x += 4;
+    // obj.y += 8;
+    // ???
+    obj.hit_x = 2;
+    obj.hit_y = 2;
     obj.hit_w = 6;
     obj.hit_h = 6;
+    obj.persistent = true;
 
-    const self = try allocator.create(Player);
-    self.game_object = obj;
-    self.input = input;
-    self.allocator = allocator;
-
-    const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
-    state.objects.append(node);
-
-    return self;
+    return .{ .game_object = obj, .input = input, .allocator = allocator };
 }
 
 fn destroy(self: *Player, allocator: Allocator) void {
-    allocator.destroy(self);
+    _ = self;
+    _ = allocator;
 }
 fn get_object(self: *Player) *GameObject {
     return &self.game_object;
@@ -84,7 +80,7 @@ fn shoot(self: *Player) void {
         .left => -8,
         .right => 0,
     };
-    _ = Bullet.create(self.allocator, self.game_object.game_state, self.game_object.x + x_offset, self.game_object.y - 8, self.input.player, dir) catch |err| {
+    _ = Bullet.create(self.allocator, self.game_object.game_state, self.game_object.x + x_offset, self.game_object.y, self.input.player, dir) catch |err| {
         switch (err) {
             error.TooMany => {},
             error.OutOfMemory => {
@@ -116,6 +112,11 @@ fn wall_jump(self: *Player, dir: i2) void {
     self.auto_var_jump = false;
     self.game_object.facing = dir;
     _ = vtable.move_x(self, @floatFromInt(-@as(i32, dir) * 3), null);
+}
+
+pub fn die(self: *Player) void {
+    self.state = .death;
+    self.t_death = 0;
 }
 pub fn update(self: *Player) void {
     const on_ground = self.game_object.check_solid(0, 1);
@@ -188,7 +189,10 @@ pub fn update(self: *Player) void {
                 }
             }
         },
-        .death => {},
+        .death => {
+            self.t_death += 1;
+            return;
+        },
     }
     _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
     _ = vtable.move_y(self, self.game_object.speed_y, @ptrCast(&on_collide_y));
@@ -247,10 +251,28 @@ pub fn reset_pallete() void {
     tic80.PALETTE_MAP.color2 = 2;
     tic80.PALETTE_MAP.color3 = 3;
 }
+pub fn reset(self: *Player) void {
+    self.state = .normal;
+    self.t_var_jump = 0;
+    self.t_fire_pose = 0;
+    self.auto_var_jump = false;
+    self.t_shoot_cooldown = 0;
+    self.t_jump_grace = 0;
+    self.jump_grace_y = 0;
+}
 pub fn draw(self: *Player) void {
     const obj = self.get_object();
     if (self.state == .death) {
         // fx...
+        const frame: i32 = self.t_death;
+        if (frame > 7) {
+            self.reset();
+            self.game_object.game_state.loaded_level.reset() catch unreachable;
+            return;
+        }
+        tdraw.set1bpp();
+        self.game_object.game_state.draw_spr(1280 + (frame * 4), obj.x - 13, obj.y - 13, .{ .transparent = &.{0}, .w = 4, .h = 4 });
+        tdraw.set4bpp();
         return;
     }
 
@@ -258,7 +280,7 @@ pub fn draw(self: *Player) void {
     tdraw.set2bpp();
     pallete(self.input.player);
     const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
-    tic80.spr(self.spr, obj.x - 4, obj.y - 8, .{ .flip = facing, .transparent = &.{0} });
+    self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
     tdraw.set4bpp();
     reset_pallete();

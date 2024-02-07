@@ -241,7 +241,7 @@ pub const Rotate = enum(u2) {
     by270 = 3,
 };
 
-const SpriteArgs = struct {
+pub const SpriteArgs = struct {
     w: i32 = 1,
     h: i32 = 1,
     transparent: []const u8 = &.{},

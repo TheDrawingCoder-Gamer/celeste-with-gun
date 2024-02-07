@@ -41,7 +41,7 @@ rotation: tic.Rotate,
 pub fn draw(self: *Bullet) void {
     Player.pallete(self.player);
     tdraw.set2bpp();
-    tic.spr(536, self.game_object.x, self.game_object.y, .{ .transparent = &.{0}, .rotate = self.rotation });
+    self.game_object.game_state.draw_spr(536, self.game_object.x, self.game_object.y, .{ .transparent = &.{0}, .rotate = self.rotation });
     Player.reset_pallete();
     tdraw.set4bpp();
 }
@@ -69,10 +69,21 @@ pub fn create(allocator: std.mem.Allocator, state: *GameState, x: i32, y: i32, p
     if (amount > 32)
         return error.TooMany;
     var obj = GameObject.create(state, x, y);
-    obj.hit_w = 4;
-    obj.hit_h = 4;
-    obj.hit_x = 0;
-    obj.hit_y = 0;
+    switch (dir) {
+        .up, .down => {
+            obj.hit_x = 2;
+            obj.hit_y = 3;
+            obj.hit_h = 2;
+            obj.hit_w = 4;
+        },
+        .left, .right => {
+            obj.hit_x = 3;
+            obj.hit_y = 2;
+            obj.hit_h = 4;
+            obj.hit_w = 2;
+        },
+    }
+
     obj.speed_x = @floatFromInt(@as(i32, dir.axis_x()) * 4);
     obj.speed_y = @floatFromInt(@as(i32, dir.axis_y()) * 4);
     const self = try allocator.create(Bullet);

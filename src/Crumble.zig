@@ -11,22 +11,22 @@ pub fn update(self: *GameObject) void {
     _ = self;
 }
 pub fn draw(self: *GameObject) void {
-    tic.spr(272, self.x, self.y, .{ .w = 2, .h = 2, .transparent = &.{0} });
+    self.game_state.draw_spr(272, self.x, self.y, .{ .w = 2, .h = 2, .transparent = &.{0} });
 }
 fn get_object(self: *GameObject) *GameObject {
     return self;
 }
 pub fn create(allocator: std.mem.Allocator, x: i32, y: i32, state: *GameState) !*GameObject {
     var self = try allocator.create(GameObject);
-    self.game_state = state;
-    self.x = x * 8;
-    self.y = y * 8;
+    // cursed
+    self.* = GameObject.create(state, x * 8, y * 8);
     self.solid = true;
     self.hit_x = 0;
     self.hit_y = 0;
     self.hit_w = 16;
     self.hit_h = 16;
     self.destructable = true;
+    self.destroyed = false;
 
     const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
     state.objects.append(node);
