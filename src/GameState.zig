@@ -49,7 +49,7 @@ fn remap(x: i32, y: i32, info: *tic.RemapInfo) void {
 pub fn loop(self: *GameState) void {
     tic.cls(13);
     // krill issue
-    tic.map(.{});
+    tic.map(.{ .remap = &remap });
     var it = self.objects.first;
     while (it) |node| : (it = node.next) {
         const obj = node.data;
