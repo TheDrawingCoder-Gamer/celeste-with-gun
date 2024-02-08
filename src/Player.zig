@@ -76,7 +76,7 @@ fn shoot(self: *Player) void {
     self.fire_dir = dir;
     const x_offset: i32 =
         switch (dir) {
-        .up, .down => -4,
+        .up, .down => 0,
         .left => -8,
         .right => 0,
     };
@@ -262,6 +262,7 @@ pub fn reset(self: *Player) void {
 }
 pub fn draw(self: *Player) void {
     const obj = self.get_object();
+    pallete(self.input.player);
     if (self.state == .death) {
         // fx...
         const frame: i32 = self.t_death;
@@ -278,7 +279,6 @@ pub fn draw(self: *Player) void {
 
     // _ = tic80.vbank(1);
     tdraw.set2bpp();
-    pallete(self.input.player);
     const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
