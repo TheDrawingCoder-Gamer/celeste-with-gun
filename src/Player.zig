@@ -7,6 +7,8 @@ const tic80 = @import("tic80.zig");
 const std = @import("std");
 const Bullet = @import("Bullet.zig");
 const tdraw = @import("draw.zig");
+const Audio = @import("Audio.zig");
+const Voice = Audio.Voice;
 const Allocator = std.mem.Allocator;
 
 const State = enum { normal, death };
@@ -27,8 +29,9 @@ allocator: std.mem.Allocator,
 t_fire_pose: u8 = 0,
 fire_dir: Bullet.Direction = .up,
 t_death: u8 = 0,
+voice: *Voice,
 
-pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input) !Player {
+pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !Player {
     var obj = GameObject.create(state, x, y);
     // obj.x += 4;
     // obj.y += 8;
@@ -39,7 +42,7 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *I
     obj.hit_h = 6;
     obj.persistent = true;
 
-    return .{ .game_object = obj, .input = input, .allocator = allocator };
+    return .{ .game_object = obj, .input = input, .allocator = allocator, .voice = voice };
 }
 
 fn destroy(self: *Player, allocator: Allocator) void {
@@ -71,7 +74,7 @@ fn shoot(self: *Player) void {
         }
         return;
     };
-    self.t_shoot_cooldown = 15;
+    self.t_shoot_cooldown = 6;
     self.t_fire_pose = 8;
     self.fire_dir = dir;
     const x_offset: i32 =
@@ -89,6 +92,7 @@ fn shoot(self: *Player) void {
         }
         return;
     };
+    tic80.sfx(3, .{ .duration = 10, .volume = 5 });
 }
 pub fn jump(self: *Player) void {
     _ = self.input.consume_jump_press();
@@ -117,6 +121,8 @@ fn wall_jump(self: *Player, dir: i2) void {
 pub fn die(self: *Player) void {
     self.state = .death;
     self.t_death = 0;
+    self.voice.play(1, .{ .volume = 10 });
+    // self.voice.sfx(5, 10, 0);
 }
 pub fn update(self: *Player) void {
     const on_ground = self.game_object.check_solid(0, 1);
@@ -194,8 +200,9 @@ pub fn update(self: *Player) void {
             return;
         },
     }
+    const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
     _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
-    _ = vtable.move_y(self, self.game_object.speed_y, @ptrCast(&on_collide_y));
+    _ = vtable.move_y(self, self.game_object.speed_y * gravity_multiplier, @ptrCast(&on_collide_y));
 
     if (self.t_fire_pose > 0) {
         self.spr = switch (self.fire_dir) {
