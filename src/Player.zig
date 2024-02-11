@@ -197,13 +197,20 @@ pub fn update(self: *Player) void {
         },
         .death => {
             self.t_death += 1;
+            self.game_object.game_state.screenwipe.wipe_timer += 1;
+            if (self.game_object.game_state.screenwipe.wipe_timer > 20) {
+                self.game_object.game_state.loaded_level.reset() catch unreachable;
+                self.reset();
+            }
             return;
         },
     }
+    // apply
     const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
     _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
     _ = vtable.move_y(self, self.game_object.speed_y * gravity_multiplier, @ptrCast(&on_collide_y));
 
+    // sprite
     if (self.t_fire_pose > 0) {
         self.spr = switch (self.fire_dir) {
             .right, .left => 527,
@@ -226,6 +233,42 @@ pub fn update(self: *Player) void {
     } else {
         self.spr = 512;
     }
+
+    // death triggers
+    switch (self.state) {
+        .death => {},
+
+        else => {
+            if (self.hazard_check(.{})) {
+                self.die();
+            }
+        },
+    }
+}
+const HazardArgs = struct {
+    ox: i32 = 0,
+    oy: i32 = 0,
+};
+pub fn hazard_check(self: *Player, args: HazardArgs) bool {
+    var it = self.game_object.game_state.objects.first;
+    while (it) |node| : (it = node.next) {
+        const o = node.data;
+        const obj = o.obj();
+        if (obj.hazard != .none and self.game_object.overlaps(o, args.ox, args.oy)) {
+            const res = switch (obj.hazard) {
+                .none => unreachable,
+                .all => true,
+                .up => self.game_object.speed_y >= 0,
+                .down => self.game_object.speed_y <= 0,
+                .right => self.game_object.speed_x <= 0,
+                .left => self.game_object.speed_x >= 0,
+            };
+            if (res)
+                return true;
+        }
+    }
+
+    return false;
 }
 pub fn on_collide_x(self: *Player, moved: i32, target: i32) bool {
     return GameObject.on_collide_x(&self.game_object, moved, target);
@@ -272,11 +315,9 @@ pub fn draw(self: *Player) void {
     pallete(self.input.player);
     if (self.state == .death) {
         // fx...
-        const frame: i32 = self.t_death;
+        var frame: i32 = self.t_death;
         if (frame > 7) {
-            self.reset();
-            self.game_object.game_state.loaded_level.reset() catch unreachable;
-            return;
+            frame = 7;
         }
         tdraw.set1bpp();
         self.game_object.game_state.draw_spr(1280 + (frame * 4), obj.x - 13, obj.y - 13, .{ .transparent = &.{0}, .w = 4, .h = 4 });

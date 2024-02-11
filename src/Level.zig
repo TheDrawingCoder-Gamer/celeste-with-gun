@@ -5,6 +5,7 @@ const std = @import("std");
 const GameState = @import("GameState.zig");
 const Player = @import("Player.zig");
 const Crumble = @import("Crumble.zig");
+const Spike = @import("Spike.zig");
 
 height: i32,
 width: i32,
@@ -36,6 +37,9 @@ pub fn init(self: *Level) !void {
             switch (tic.mget(x, y)) {
                 35 => {
                     _ = try Crumble.create(self.state.allocator, x, y, self.state);
+                },
+                51, 52, 53, 54 => |it| {
+                    _ = try Spike.create(self.state.allocator, self.state, x * 8, y * 8, @enumFromInt(@as(u2, @intCast(it - 51))));
                 },
                 16 => {
                     self.player_x = x;

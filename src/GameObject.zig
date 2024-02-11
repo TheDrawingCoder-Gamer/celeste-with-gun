@@ -178,18 +178,16 @@ pub fn create(state: *GameState, x: i32, y: i32) GameObject {
 fn identity(self: *GameObject) *GameObject {
     return self;
 }
-pub fn update(self: *GameObject) void {
-    _ = self;
-}
-pub fn draw(self: *GameObject) void {
-    _ = self;
-}
-fn destroy(self: *GameObject, alloc: Allocator) void {
-    _ = self;
+
+pub fn noDestroy(ctx: *anyopaque, alloc: Allocator) void {
+    _ = ctx;
     _ = alloc;
 }
-
+pub fn noUpdate(ctx: *anyopaque) void {
+    _ = ctx;
+}
+pub const noDraw = noUpdate;
 pub fn debug_draw_hitbox(self: *GameObject) void {
     tic80.rectb(self.x + self.hit_x, self.y + self.hit_y, self.hit_w, self.hit_h, 1);
 }
-pub const vtable: VTable = .{ .get_object = @ptrCast(&identity), .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .destroy = @ptrCast(&destroy) };
+pub const vtable: VTable = .{ .get_object = @ptrCast(&identity), .ptr_update = &noUpdate, .ptr_draw = &noDraw, .destroy = &noDestroy };

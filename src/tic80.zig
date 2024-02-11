@@ -36,8 +36,8 @@ const TextureSource = enum(i32) { TILES = 0, MAP, VBANK1 };
 // ------------------------
 // HARDWARE REGISTERS / RAM
 
-pub const WIDTH: u32 = 240;
-pub const HEIGHT: u32 = 136;
+pub const WIDTH = 240;
+pub const HEIGHT = 136;
 
 pub const FRAMEBUFFER: *allowzero volatile [16320]u8 = @as(*allowzero volatile [16320]u8, @ptrFromInt(0));
 pub const TILES: *[8192]u8 = @as(*[8192]u8, @ptrFromInt(0x4000));

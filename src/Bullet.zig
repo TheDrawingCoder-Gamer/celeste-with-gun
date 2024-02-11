@@ -52,6 +52,7 @@ fn die_on_collide(self: *Bullet, moved: i32, target: i32) bool {
     if (item) |obj| {
         if (obj.obj().destructable) {
             obj.obj().destroyed = true;
+            tic.sfx(3, .{ .volume = 9, .duration = 5 });
         }
     }
     self.game_object.destroyed = true;

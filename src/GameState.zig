@@ -5,6 +5,7 @@ const std = @import("std");
 const tic = @import("tic80.zig");
 const Level = @import("Level.zig");
 const Player = @import("Player.zig");
+const Screenwipe = @import("Screenwipe.zig");
 
 pub const ObjectList = std.DoublyLinkedList(GameObject.IsGameObject);
 
@@ -15,6 +16,7 @@ camera_x: i32 = 0,
 camera_y: i32 = 0,
 loaded_level: Level = undefined,
 players: []const *Player,
+screenwipe: Screenwipe = .{},
 
 pub fn init(allocator: std.mem.Allocator, players: []const *Player) GameState {
     const list: std.DoublyLinkedList(GameObject.IsGameObject) = .{};
@@ -38,6 +40,7 @@ pub fn clean(self: *GameState) void {
         node.data.destroy(self.allocator);
         self.allocator.destroy(node);
     }
+    self.screenwipe.reset();
 }
 
 fn remap(x: i32, y: i32, info: *tic.RemapInfo) void {
@@ -66,5 +69,7 @@ pub fn loop(self: *GameState) void {
         player.update();
         player.draw();
     }
+    self.screenwipe.update();
+    self.screenwipe.draw(self);
     self.time += 1;
 }
