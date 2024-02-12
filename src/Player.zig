@@ -8,10 +8,12 @@ const std = @import("std");
 const Bullet = @import("Bullet.zig");
 const tdraw = @import("draw.zig");
 const Audio = @import("Audio.zig");
+const Crumble = @import("Crumble.zig");
 const Voice = Audio.Voice;
 const Allocator = std.mem.Allocator;
 
 const State = enum { normal, death };
+const Mode = enum { none, shoot, dash, grapple };
 
 pub const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy) };
 
@@ -30,6 +32,7 @@ t_fire_pose: u8 = 0,
 fire_dir: Bullet.Direction = .up,
 t_death: u8 = 0,
 voice: *Voice,
+mode: Mode = .shoot,
 
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !Player {
     var obj = GameObject.create(state, x, y);
@@ -198,7 +201,7 @@ pub fn update(self: *Player) void {
         .death => {
             self.t_death += 1;
             self.game_object.game_state.screenwipe.wipe_timer += 1;
-            if (self.game_object.game_state.screenwipe.wipe_timer > 20) {
+            if (self.game_object.game_state.screenwipe.wipe_timer > 40) {
                 self.game_object.game_state.loaded_level.reset() catch unreachable;
                 self.reset();
             }
@@ -234,6 +237,30 @@ pub fn update(self: *Player) void {
         self.spr = 512;
     }
 
+    if ((self.game_object.x > self.game_object.game_state.camera_x + tic80.WIDTH) or (self.game_object.x < self.game_object.game_state.camera_x)) {
+        self.game_object.game_state.target_cam_x = @divFloor(self.game_object.x, tic80.WIDTH) * tic80.WIDTH;
+    }
+    if ((self.game_object.y > self.game_object.game_state.camera_y + tic80.HEIGHT) or (self.game_object.y < self.game_object.game_state.camera_y)) {
+        self.game_object.game_state.target_cam_y = @divFloor(self.game_object.y, tic80.HEIGHT) * tic80.HEIGHT;
+    }
+    // object interactions
+    {
+        var it = self.game_object.game_state.objects.first;
+        while (it) |node| : (it = node.next) {
+            const o = node.data;
+            const obj = o.obj();
+            switch (obj.special_type) {
+                .crumble => {
+                    const crumble: *Crumble = @alignCast(@ptrCast(o.ptr));
+                    if (!crumble.dying and self.game_object.overlaps(o, 0, 1)) {
+                        o.die();
+                    }
+                },
+                .none => {},
+            }
+        }
+    }
+
     // death triggers
     switch (self.state) {
         .death => {},
@@ -267,7 +294,24 @@ pub fn hazard_check(self: *Player, args: HazardArgs) bool {
                 return true;
         }
     }
+    {
+        var i: i32 = @divFloor(self.game_object.x + self.game_object.hit_x, 8);
+        // in 4k?
+        const imax = @divFloor(self.game_object.x + self.game_object.hit_x + @as(i32, self.game_object.hit_w) - 1, 8);
+        const jmin = @divFloor(self.game_object.y + self.game_object.hit_y, 8);
+        const jmax = @divFloor(self.game_object.y + self.game_object.hit_y + @as(i32, self.game_object.hit_h) - 1, 8);
 
+        while (i <= imax) {
+            var j = jmin;
+            while (j <= jmax) {
+                if (tic80.fget(tic80.mget(i, j), 2)) {
+                    return true;
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+    }
     return false;
 }
 pub fn on_collide_x(self: *Player, moved: i32, target: i32) bool {
@@ -313,6 +357,8 @@ pub fn reset(self: *Player) void {
 pub fn draw(self: *Player) void {
     const obj = self.get_object();
     pallete(self.input.player);
+    defer reset_pallete();
+    defer tdraw.set4bpp();
     if (self.state == .death) {
         // fx...
         var frame: i32 = self.t_death;
@@ -321,7 +367,6 @@ pub fn draw(self: *Player) void {
         }
         tdraw.set1bpp();
         self.game_object.game_state.draw_spr(1280 + (frame * 4), obj.x - 13, obj.y - 13, .{ .transparent = &.{0}, .w = 4, .h = 4 });
-        tdraw.set4bpp();
         return;
     }
 
@@ -330,6 +375,4 @@ pub fn draw(self: *Player) void {
     const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
-    tdraw.set4bpp();
-    reset_pallete();
 }

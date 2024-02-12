@@ -14,6 +14,9 @@ time: u64 = 0,
 allocator: std.mem.Allocator,
 camera_x: i32 = 0,
 camera_y: i32 = 0,
+target_cam_x: i32 = 0,
+target_cam_y: i32 = 0,
+pan_speed: i16 = 5,
 loaded_level: Level = undefined,
 players: []const *Player,
 screenwipe: Screenwipe = .{},
@@ -52,7 +55,9 @@ fn remap(x: i32, y: i32, info: *tic.RemapInfo) void {
 pub fn loop(self: *GameState) void {
     tic.cls(13);
     // krill issue
-    tic.map(.{ .remap = &remap });
+    const ccx = @divTrunc(self.camera_x, 8) + @as(i32, if (@mod(self.camera_x, 8) == 0) 1 else 0);
+    const ccy = @divTrunc(self.camera_y, 8) + @as(i32, if (@mod(self.camera_y, 8) == 0) 1 else 0);
+    tic.map(.{ .remap = &remap, .x = ccx - 1, .w = 32, .y = ccy - 1, .h = 17, .sx = @rem(self.camera_x, 8), .sy = @rem(self.camera_y, 8) });
     var it = self.objects.first;
     while (it) |node| : (it = node.next) {
         const obj = node.data;
@@ -72,4 +77,23 @@ pub fn loop(self: *GameState) void {
     self.screenwipe.update();
     self.screenwipe.draw(self);
     self.time += 1;
+
+    if (self.camera_x != self.target_cam_x) {
+        if (self.camera_x > self.target_cam_x) {
+            self.camera_x -= self.pan_speed;
+            self.camera_x = @max(self.camera_x, self.target_cam_x);
+        } else {
+            self.camera_x += self.pan_speed;
+            self.camera_x = @min(self.camera_x, self.target_cam_x);
+        }
+    }
+    if (self.camera_y != self.target_cam_y) {
+        if (self.camera_y > self.target_cam_y) {
+            self.camera_y -= self.pan_speed;
+            self.camera_y = @max(self.camera_y, self.target_cam_y);
+        } else {
+            self.camera_y += self.pan_speed;
+            self.camera_y = @min(self.camera_y, self.target_cam_y);
+        }
+    }
 }

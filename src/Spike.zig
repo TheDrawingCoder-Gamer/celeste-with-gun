@@ -65,5 +65,5 @@ fn destroy(self: *anyopaque, allocator: Allocator) void {
 
 fn draw(ctx: *anyopaque) void {
     const self: *Spike = @alignCast(@ptrCast(ctx));
-    tic.spr(290, self.game_object.x, self.game_object.y, .{ .rotate = @enumFromInt(@intFromEnum(self.direction)) });
+    self.game_object.game_state.draw_spr(290, self.game_object.x, self.game_object.y, .{ .rotate = @enumFromInt(@intFromEnum(self.direction)) });
 }

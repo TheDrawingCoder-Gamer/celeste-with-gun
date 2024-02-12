@@ -50,10 +50,7 @@ fn die_on_collide(self: *Bullet, moved: i32, target: i32) bool {
     _ = target;
     const item = self.game_object.first_overlap(self.direction.axis_x(), self.direction.axis_y());
     if (item) |obj| {
-        if (obj.obj().destructable) {
-            obj.obj().destroyed = true;
-            tic.sfx(3, .{ .volume = 9, .duration = 5 });
-        }
+        obj.die();
     }
     self.game_object.destroyed = true;
     return true;

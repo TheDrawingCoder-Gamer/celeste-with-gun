@@ -4,6 +4,7 @@ const tic80 = @import("tic80.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const GameState = @import("GameState.zig");
+const Player = @import("Player.zig");
 
 pub const HazardType = enum { none, all, left, up, right, down };
 pub const IsGameObject = struct {
@@ -24,14 +25,18 @@ pub const IsGameObject = struct {
     pub fn move_y(self: *const IsGameObject, y: f32, on_collide: ?*const fn (*anyopaque, i32, i32) bool) bool {
         return self.table.move_y(self.ptr, y, on_collide);
     }
+    pub fn die(self: *const IsGameObject) void {
+        self.table.ptr_die(self.ptr);
+    }
     pub fn destroy(self: *const IsGameObject, alloc: Allocator) void {
         self.table.destroy(self.ptr, alloc);
     }
 };
 pub const VTable = struct {
     get_object: *const fn (self: *anyopaque) *GameObject,
-    ptr_update: *const fn (self: *anyopaque) void,
-    ptr_draw: *const fn (self: *anyopaque) void,
+    ptr_update: *const fn (self: *anyopaque) void = &GameObject.noUpdate,
+    ptr_draw: *const fn (self: *anyopaque) void = &GameObject.noDraw,
+    ptr_die: *const fn (self: *anyopaque) void = &GameObject.noDie,
     destroy: *const fn (self: *anyopaque, allocator: std.mem.Allocator) void,
     pub fn move_x(self: *const VTable, item: *anyopaque, x: f32, on_collide: ?*const fn (*anyopaque, moved: i32, target: i32) bool) bool {
         var gobj = self.get_object(item);
@@ -79,6 +84,7 @@ pub const VTable = struct {
     }
 };
 
+pub const SpecialType = enum { crumble, none };
 speed_x: f32 = 0,
 speed_y: f32 = 0,
 remainder_x: f32 = 0,
@@ -94,8 +100,8 @@ x: i32,
 y: i32,
 id: i64,
 destroyed: bool = false,
+special_type: SpecialType = .none,
 game_state: *GameState,
-destructable: bool = false,
 // will never be freed on cleanup
 persistent: bool = false,
 
@@ -153,6 +159,12 @@ pub fn first_overlap(self: *GameObject, ox: i32, oy: i32) ?IsGameObject {
             return obj;
         }
     }
+    for (self.game_state.players) |player| {
+        const player_table = .{ .ptr = player, .table = Player.vtable };
+        if (&player.game_object != self and self.overlaps(player_table, ox, oy)) {
+            return player_table;
+        }
+    }
     return null;
 }
 pub fn on_collide_x(self: *GameObject, moved: i32, target: i32) bool {
@@ -184,6 +196,9 @@ pub fn noDestroy(ctx: *anyopaque, alloc: Allocator) void {
     _ = alloc;
 }
 pub fn noUpdate(ctx: *anyopaque) void {
+    _ = ctx;
+}
+pub fn noDie(ctx: *anyopaque) void {
     _ = ctx;
 }
 pub const noDraw = noUpdate;

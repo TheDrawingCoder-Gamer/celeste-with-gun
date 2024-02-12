@@ -3,7 +3,6 @@ const Player = @import("Player.zig");
 const GameState = @import("GameState.zig");
 const Input = @import("Input.zig");
 const std = @import("std");
-const Crumble = @import("Crumble.zig");
 const Buddy2Allocator = @import("buddy2").Buddy2Allocator(.{});
 const Level = @import("Level.zig");
 const Audio = @import("Audio.zig");
