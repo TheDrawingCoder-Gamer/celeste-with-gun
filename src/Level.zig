@@ -24,6 +24,8 @@ pub fn setup(self: *Level) !void {
     }
     self.state.camera_x = self.x;
     self.state.camera_y = self.y;
+    self.state.target_cam_x = self.x;
+    self.state.target_cam_y = self.y;
 }
 pub fn test_level(state: *GameState) *Level {
     state.loaded_level = .{ .x = 0, .y = 0, .width = 60, .height = 17, .player_x = 1, .player_y = 13, .state = state };

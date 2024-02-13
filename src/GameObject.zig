@@ -84,7 +84,7 @@ pub const VTable = struct {
     }
 };
 
-pub const SpecialType = enum { crumble, none };
+pub const SpecialType = enum { crumble, fragile, none };
 speed_x: f32 = 0,
 speed_y: f32 = 0,
 remainder_x: f32 = 0,
@@ -109,10 +109,26 @@ pub fn overlaps(self: *GameObject, btable: IsGameObject, ox: i32, oy: i32) bool 
     const b = btable.obj();
     if (self == b)
         return false;
-    return ox + self.x + self.hit_x + self.hit_w > b.x + b.hit_x and
-        oy + self.y + self.hit_y + self.hit_h > b.y + b.hit_y and
-        ox + self.x + self.hit_x < b.x + b.hit_x + b.hit_w and
-        oy + self.y + self.hit_y < b.y + b.hit_y + b.hit_h;
+    return self.overlaps_box(ox, oy, b.x, b.y, .{ .x = b.hit_x, .y = b.hit_y, .w = b.hit_w, .h = b.hit_h });
+}
+pub const BoundingBox = struct {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+};
+pub fn overlaps_box(self: *GameObject, ox: i32, oy: i32, x: i32, y: i32, box: BoundingBox) bool {
+    const sx1 = ox + self.x + self.hit_x;
+    const sy1 = oy + self.y + self.hit_y;
+    const sx2 = ox + self.x + self.hit_x + self.hit_w;
+    const sy2 = ox + self.y + self.hit_y + self.hit_h;
+
+    const bx1 = x + box.x;
+    const by1 = y + box.y;
+    const bx2 = x + box.x + box.w;
+    const by2 = y + box.y + box.h;
+    return (@min(sy2, by2) - @max(sy1, by1) > 0) and
+        (@min(sx2, bx2) - @max(sx1, bx1) > 0);
 }
 pub fn contains(self: *GameObject, px: u64, py: u64) bool {
     return px >= self.x + self.hit_x and

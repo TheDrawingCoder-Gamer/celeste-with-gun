@@ -23,6 +23,7 @@ pub fn create(allocator: std.mem.Allocator, x: i32, y: i32, state: *GameState) !
     self.hit_w = 16;
     self.hit_h = 16;
     self.destroyed = false;
+    self.special_type = .fragile;
 
     const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
     state.objects.append(node);
