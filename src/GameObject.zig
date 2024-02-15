@@ -5,6 +5,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const GameState = @import("GameState.zig");
 const Player = @import("Player.zig");
+const types = @import("types.zig");
 
 pub const HazardType = enum { none, all, left, up, right, down };
 pub const IsGameObject = struct {
@@ -31,6 +32,12 @@ pub const IsGameObject = struct {
     pub fn destroy(self: *const IsGameObject, alloc: Allocator) void {
         self.table.destroy(self.ptr, alloc);
     }
+    pub fn touch(self: *const IsGameObject, player: *Player) void {
+        self.table.touch(self.ptr, player);
+    }
+    pub fn can_touch(self: *const IsGameObject, player: *Player) bool {
+        return self.table.can_touch(self.ptr, player);
+    }
 };
 pub const VTable = struct {
     get_object: *const fn (self: *anyopaque) *GameObject,
@@ -38,6 +45,8 @@ pub const VTable = struct {
     ptr_draw: *const fn (self: *anyopaque) void = &GameObject.noDraw,
     ptr_die: *const fn (self: *anyopaque) void = &GameObject.noDie,
     destroy: *const fn (self: *anyopaque, allocator: std.mem.Allocator) void,
+    touch: *const fn (self: *anyopaque, player: *Player) void = &GameObject.noTouch,
+    can_touch: *const fn (self: *anyopaque, player: *Player) bool = &GameObject.noCanTouch,
     pub fn move_x(self: *const VTable, item: *anyopaque, x: f32, on_collide: ?*const fn (*anyopaque, moved: i32, target: i32) bool) bool {
         var gobj = self.get_object(item);
         gobj.remainder_x += x;
@@ -84,7 +93,7 @@ pub const VTable = struct {
     }
 };
 
-pub const SpecialType = enum { crumble, fragile, none };
+pub const SpecialType = enum { crumble, fragile, touchable, none };
 speed_x: f32 = 0,
 speed_y: f32 = 0,
 remainder_x: f32 = 0,
@@ -109,26 +118,17 @@ pub fn overlaps(self: *GameObject, btable: IsGameObject, ox: i32, oy: i32) bool 
     const b = btable.obj();
     if (self == b)
         return false;
-    return self.overlaps_box(ox, oy, b.x, b.y, .{ .x = b.hit_x, .y = b.hit_y, .w = b.hit_w, .h = b.hit_h });
+    return self.overlaps_box(ox, oy, b.world_hitbox());
 }
-pub const BoundingBox = struct {
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
-};
-pub fn overlaps_box(self: *GameObject, ox: i32, oy: i32, x: i32, y: i32, box: BoundingBox) bool {
-    const sx1 = ox + self.x + self.hit_x;
-    const sy1 = oy + self.y + self.hit_y;
-    const sx2 = ox + self.x + self.hit_x + self.hit_w;
-    const sy2 = ox + self.y + self.hit_y + self.hit_h;
 
-    const bx1 = x + box.x;
-    const by1 = y + box.y;
-    const bx2 = x + box.x + box.w;
-    const by2 = y + box.y + box.h;
-    return (@min(sy2, by2) - @max(sy1, by1) > 0) and
-        (@min(sx2, bx2) - @max(sx1, bx1) > 0);
+pub fn world_hitbox(self: *const GameObject) types.Box {
+    return .{ .x = self.x + self.hit_x, .y = self.y + self.hit_y, .w = self.hit_w, .h = self.hit_h };
+}
+pub fn overlaps_box(self: *GameObject, ox: i32, oy: i32, box: types.Box) bool {
+    var selfbox = self.world_hitbox();
+    selfbox.x += ox;
+    selfbox.y += oy;
+    return selfbox.overlapping(box);
 }
 pub fn contains(self: *GameObject, px: u64, py: u64) bool {
     return px >= self.x + self.hit_x and
@@ -216,6 +216,16 @@ pub fn noUpdate(ctx: *anyopaque) void {
 }
 pub fn noDie(ctx: *anyopaque) void {
     _ = ctx;
+}
+
+pub fn noTouch(ctx: *anyopaque, player: *Player) void {
+    _ = ctx;
+    _ = player;
+}
+pub fn noCanTouch(ctx: *anyopaque, player: *Player) bool {
+    _ = ctx;
+    _ = player;
+    return false;
 }
 pub const noDraw = noUpdate;
 pub fn debug_draw_hitbox(self: *GameObject) void {

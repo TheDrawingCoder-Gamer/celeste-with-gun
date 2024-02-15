@@ -21,14 +21,13 @@ direction: Direction,
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, dir: Direction) !*Spike {
     var obj = GameObject.create(state, x, y);
     obj.hit_x = switch (dir) {
-        .down, .left => 0,
-        .right => 6,
-        .up => 6,
+        .down, .up, .right => 0,
+        .left => 6,
     };
     obj.hit_y = switch (dir) {
-        .up, .left => 0,
-        .right => 6,
-        .down => 6,
+        .down, .left => 0,
+        .right => 0,
+        .up => 6,
     };
     obj.hit_w = switch (dir) {
         .up, .down => 8,

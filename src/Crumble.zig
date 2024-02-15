@@ -76,9 +76,11 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32) !*Crumble
     obj.solid = true;
 
     const self = try allocator.create(Crumble);
-    self.game_object = obj;
-    self.start_x = obj.x;
-    self.start_y = obj.y;
+    self.* = .{
+        .game_object = obj,
+        .start_x = obj.x,
+        .start_y = obj.y,
+    };
 
     const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
     state.objects.append(node);

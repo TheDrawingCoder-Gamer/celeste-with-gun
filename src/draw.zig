@@ -16,6 +16,6 @@ pub fn set4bpp() void {
 const PaletteIO = std.packed_int_array.PackedIntIo(u4, .little);
 pub fn reset_pallete() void {
     for (0..16) |i| {
-        PaletteIO.set(tic.PALETTE_MAP_u8, i, 0, i);
+        PaletteIO.set(tic.PALETTE_MAP_u8, i, 0, @intCast(i));
     }
 }

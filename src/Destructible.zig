@@ -38,4 +38,5 @@ fn destroy(self: *GameObject, allocator: Allocator) void {
 fn die(ctx: *anyopaque) void {
     const self: *GameObject = @alignCast(@ptrCast(ctx));
     self.destroyed = true;
+    tic.sfx(6, .{ .duration = 10, .volume = 6 });
 }

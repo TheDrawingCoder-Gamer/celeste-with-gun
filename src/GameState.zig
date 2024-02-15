@@ -7,6 +7,7 @@ const Level = @import("Level.zig");
 const Player = @import("Player.zig");
 const Screenwipe = @import("Screenwipe.zig");
 const types = @import("types.zig");
+const Voice = @import("Audio.zig").Voice;
 
 pub const ObjectList = std.DoublyLinkedList(GameObject.IsGameObject);
 
@@ -15,17 +16,17 @@ time: u64 = 0,
 allocator: std.mem.Allocator,
 camera_x: i32 = 0,
 camera_y: i32 = 0,
-target_cam_x: i32 = 0,
-target_cam_y: i32 = 0,
 pan_speed: i16 = 5,
 loaded_level: Level = undefined,
 players: []const *Player,
 screenwipe: Screenwipe = .{},
 panning: bool = false,
+current_player_spawn: types.Point = .{ .x = 0, .y = 0 },
+voice: *Voice,
 
-pub fn init(allocator: std.mem.Allocator, players: []const *Player) GameState {
+pub fn init(allocator: std.mem.Allocator, players: []const *Player, voice: *Voice) GameState {
     const list: std.DoublyLinkedList(GameObject.IsGameObject) = .{};
-    return .{ .allocator = allocator, .objects = list, .players = players };
+    return .{ .allocator = allocator, .objects = list, .players = players, .voice = voice };
 }
 
 pub fn wrap_node(self: *GameState, table: GameObject.IsGameObject) !*ObjectList.Node {
@@ -58,13 +59,40 @@ fn remap(x: i32, y: i32, info: *tic.RemapInfo) void {
 pub fn camera(self: *const GameState) types.Point {
     return .{ .x = self.camera_x, .y = self.camera_y };
 }
+pub fn snap_cam(self: *GameState, x: i32, y: i32) void {
+    self.camera_x = x;
+    self.camera_y = y;
+}
+
+pub fn center_x(self: *GameState, on: i32) void {
+    const half_width = tic.WIDTH / 2;
+    const x_center = self.camera_x + half_width;
+
+    if (on > x_center) {
+        self.camera_x = @min(on - half_width, (self.loaded_level.x + self.loaded_level.width) * 8 - tic.WIDTH);
+    } else {
+        self.camera_x = @max(on - half_width, self.loaded_level.x * 8);
+    }
+}
+pub fn center_y(self: *GameState, on: i32) void {
+    const half_height = tic.HEIGHT / 2;
+    const y_center = self.camera_y + half_height;
+
+    if (on > y_center) {
+        self.camera_y = @min(on - half_height, (self.loaded_level.y + self.loaded_level.height) * 8 - tic.HEIGHT);
+    } else {
+        self.camera_y = @max(on - half_height, self.loaded_level.y * 8);
+    }
+}
 pub fn loop(self: *GameState) void {
     tic.cls(13);
     const should_update = self.screenwipe.infade > 45 and !self.panning and self.screenwipe.level_wipe > 45;
     // krill issue
-    const ccx = @divTrunc(self.camera_x, 8) + @as(i32, if (@mod(self.camera_x, 8) == 0) 1 else 0);
-    const ccy = @divTrunc(self.camera_y, 8) + @as(i32, if (@mod(self.camera_y, 8) == 0) 1 else 0);
-    tic.map(.{ .remap = &remap, .x = ccx - 1, .w = 32, .y = ccy - 1, .h = 17, .sx = @rem(self.camera_x, 8), .sy = @rem(self.camera_y, 8) });
+
+    const ccx = @divFloor(self.camera_x, 8);
+    const ccy = @divFloor(self.camera_y, 8);
+
+    tic.map(.{ .remap = &remap, .x = ccx, .w = 32, .y = ccy, .h = 18, .sx = -@rem(self.camera_x, 8), .sy = -@rem(self.camera_y, 8) });
     {
         var it = self.objects.first;
         while (it) |node| : (it = node.next) {
@@ -84,16 +112,45 @@ pub fn loop(self: *GameState) void {
         if (should_update)
             player.update();
         player.draw();
+        if (player.game_object.y > (self.loaded_level.y + self.loaded_level.height) * 8) {
+            if (player.state != .death) {
+                player.die();
+                continue;
+            }
+        }
+
+        if ((player.game_object.x > (self.loaded_level.x + self.loaded_level.width) * 8) or (player.game_object.x < self.loaded_level.x * 8) or (player.game_object.y > (self.loaded_level.y + self.loaded_level.height) * 8) or (player.game_object.y < self.loaded_level.y * 8)) {
+            // TODO: Multiplayer
+            const room = Level.find_at(player.game_object.x, player.game_object.y);
+            if (room) |r| {
+                r.load_level(self).load() catch unreachable;
+            } else {
+                // ???
+                if (player.state != .death) {
+                    player.die();
+                }
+            }
+        }
     }
     if (self.screenwipe.level_wipe == 44) {
-        self.camera_x = self.target_cam_x;
-        self.camera_y = self.target_cam_y;
         self.screenwipe.infade = 0;
     }
     self.screenwipe.update();
     self.screenwipe.draw();
     self.time += 1;
-    if ((self.camera_x != self.target_cam_x or self.camera_y != self.target_cam_y) and self.screenwipe.level_wipe > 45) {
-        self.screenwipe.level_wipe = 0;
+
+    switch (self.loaded_level.cam_mode) {
+        .locked => {},
+        .follow_x => {
+            self.center_x(self.players[0].game_object.x);
+        },
+        .follow_y => {
+            self.center_y(self.players[0].game_object.y);
+        },
+        .free_follow => {
+            const host = self.players[0];
+            self.center_x(host.game_object.x);
+            self.center_y(host.game_object.y);
+        },
     }
 }

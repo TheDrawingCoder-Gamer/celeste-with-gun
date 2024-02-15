@@ -10,6 +10,8 @@ input_jump: bool = false,
 input_jump_pressed: u4 = 0,
 input_action: bool = false,
 input_action_pressed: u4 = 0,
+input_gun: bool = false,
+input_gun_pressed: u4 = 0,
 axis_x_value: i2 = 0,
 axis_x_turned: bool = false,
 axis_y_value: i2 = 0,
@@ -24,7 +26,8 @@ pub fn update(self: *Input) void {
     const up = tic80.btn(0 + player_idx);
     const down = tic80.btn(1 + player_idx);
     const jump = tic80.btn(4 + player_idx);
-    const action = tic80.btn(5 + player_idx) or tic80.btn(6 + player_idx);
+    const action = tic80.btn(5 + player_idx);
+    const gun = tic80.btn(6 + player_idx);
 
     if (left) {
         if (right) {
@@ -98,6 +101,18 @@ pub fn update(self: *Input) void {
         }
     }
     self.input_action = action;
+
+    if (gun and !self.input_gun) {
+        self.input_gun_pressed = 8;
+    } else {
+        if (gun) {
+            if (self.input_gun_pressed > 0)
+                self.input_gun_pressed -= 1;
+        } else {
+            self.input_gun_pressed = 0;
+        }
+    }
+    self.input_gun = gun;
 }
 
 pub fn consume_jump_press(self: *Input) bool {
@@ -109,5 +124,11 @@ pub fn consume_jump_press(self: *Input) bool {
 pub fn consume_action_press(self: *Input) bool {
     const res = self.input_action_pressed > 0;
     self.input_action_pressed = 0;
+    return res;
+}
+
+pub fn consume_gun_press(self: *Input) bool {
+    const res = self.input_gun_pressed > 0;
+    self.input_gun_pressed = 0;
     return res;
 }

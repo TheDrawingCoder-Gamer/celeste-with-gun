@@ -11,9 +11,10 @@ const Audio = @import("Audio.zig");
 const Crumble = @import("Crumble.zig");
 const Voice = Audio.Voice;
 const Allocator = std.mem.Allocator;
+const types = @import("types.zig");
 
 const State = enum { normal, death, dash, grapple_start, grapple_attach, grapple_pull };
-const Mode = enum { none, shoot, dash, grapple };
+const Mode = enum { none, dash, grapple };
 
 pub const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy) };
 
@@ -35,6 +36,12 @@ voice: *Voice,
 mode: Mode = .dash,
 t_dash_time: u8 = 0,
 can_dash: bool = true,
+host: bool = false,
+// doesn't affect hitbox, only used for detecting wave and hyper dashes
+crouching: bool = false,
+down_dash: bool = false,
+t_recharge: u8 = 0,
+recharging: bool = false,
 
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !Player {
     var obj = GameObject.create(state, x, y);
@@ -43,7 +50,7 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *I
     // ???
     obj.hit_x = 2;
     obj.hit_y = 2;
-    obj.hit_w = 6;
+    obj.hit_w = 5;
     obj.hit_h = 6;
     obj.persistent = true;
 
@@ -63,7 +70,7 @@ fn approach(x: f32, target: f32, max_delta: f32) f32 {
 }
 
 fn shoot(self: *Player) void {
-    _ = self.input.consume_action_press();
+    _ = self.input.consume_gun_press();
     const dir: Bullet.Direction = blk: {
         if (self.input.input_y == -1) {
             break :blk .up;
@@ -99,7 +106,7 @@ fn shoot(self: *Player) void {
     };
     tic80.sfx(3, .{ .duration = 10, .volume = 5 });
 }
-pub fn jump(self: *Player) void {
+fn raw_jump(self: *Player) void {
     _ = self.input.consume_jump_press();
     self.state = .normal;
     self.game_object.speed_y = -4;
@@ -111,7 +118,19 @@ pub fn jump(self: *Player) void {
     _ = vtable.move_y(self, @floatFromInt(self.jump_grace_y - self.game_object.y), null);
 }
 
-fn dash_jump(self: *Player) void {
+fn jump(self: *Player) void {
+    self.raw_jump();
+    self.voice.play(5, .{ .volume = 5 });
+}
+
+fn super_dash(self: *Player, recover: bool) void {
+    self.game_object.speed_x = std.math.sign(self.game_object.speed_x) * 3;
+    self.raw_jump();
+    self.can_dash = recover;
+    self.reset_dash_info();
+    self.voice.play(2, .{ .volume = 5 });
+}
+fn dash_jump(self: *Player, recover: bool) void {
     _ = self.input.consume_jump_press();
     self.state = .normal;
     self.game_object.speed_y = -2;
@@ -120,7 +139,8 @@ fn dash_jump(self: *Player) void {
     self.t_var_jump = 4;
     self.t_jump_grace = 0;
     self.auto_var_jump = false;
-    self.can_dash = true;
+    self.reset_dash_info();
+    self.can_dash = recover;
     self.voice.play(2, .{ .volume = 5 });
     _ = vtable.move_y(self, @floatFromInt(self.jump_grace_y - self.game_object.y), null);
 }
@@ -137,6 +157,11 @@ fn wall_bounce(self: *Player, dir: i2) void {
     _ = vtable.move_x(self, @floatFromInt(-@as(i32, dir) * 3), null);
     self.voice.play(2, .{ .volume = 5 });
 }
+
+fn reset_dash_info(self: *Player) void {
+    self.recharging = false;
+    self.t_recharge = 0;
+}
 fn wall_jump(self: *Player, dir: i2) void {
     _ = self.input.consume_jump_press();
     self.state = .normal;
@@ -147,25 +172,40 @@ fn wall_jump(self: *Player, dir: i2) void {
     self.auto_var_jump = false;
     self.game_object.facing = dir;
     _ = vtable.move_x(self, @floatFromInt(-@as(i32, dir) * 3), null);
+    self.voice.play(5, .{ .volume = 5 });
 }
 
 fn dash(self: *Player) void {
     _ = self.input.consume_action_press();
     self.state = .dash;
     self.can_dash = false;
+    self.recharging = false;
+    self.t_recharge = 0;
+    self.down_dash = self.input.input_y > 0;
     const x_dir =
         if (self.input.input_x == 0 and self.input.input_y == 0)
         self.game_object.facing
     else
         self.input.input_x;
-    self.game_object.speed_x = @as(f32, @floatFromInt(x_dir)) * 6;
-    self.game_object.speed_y = @as(f32, @floatFromInt(self.input.input_y)) * 6;
+    const x_speed: f32 =
+        if (x_dir != 0 and @as(i2, @intFromFloat(std.math.sign(self.game_object.speed_x))) == x_dir)
+        if (x_dir == 1)
+            @max(4, self.game_object.speed_x)
+        else
+            @min(-4, self.game_object.speed_y)
+    else
+        4 * @as(f32, @floatFromInt(x_dir));
+    self.game_object.speed_x = x_speed;
+    self.game_object.speed_y = @as(f32, @floatFromInt(self.input.input_y)) * 4;
     self.t_dash_time = 8;
+    self.voice.play(4, .{ .volume = 5 });
 }
 fn end_dash(self: *Player) void {
     self.state = .normal;
-    self.game_object.speed_x = @divFloor(self.game_object.speed_x, 2);
-    self.game_object.speed_y = @divFloor(self.game_object.speed_y, 2);
+    if (!self.down_dash) {
+        self.game_object.speed_x = 2 * std.math.sign(self.game_object.speed_x);
+        self.game_object.speed_y = 2 * std.math.sign(self.game_object.speed_y);
+    }
 }
 pub fn die(self: *Player) void {
     self.state = .death;
@@ -194,11 +234,21 @@ pub fn update(self: *Player) void {
         self.t_shoot_cooldown -= 1;
     if (self.t_fire_pose > 0)
         self.t_fire_pose -= 1;
+    if (self.t_recharge > 0)
+        self.t_recharge -= 1;
     var sliding = false;
     switch (self.state) {
         .normal => {
             if (self.input.input_x != 0) {
                 self.game_object.facing = self.input.input_x;
+            }
+
+            if (on_ground) {
+                if (self.input.input_y > 0) {
+                    self.crouching = true;
+                } else {
+                    self.crouching = false;
+                }
             }
 
             var target: f32 = 0;
@@ -208,7 +258,11 @@ pub fn update(self: *Player) void {
                 accel = 0.05;
             } else if (on_ground) {
                 target = 1;
-                accel = 0.4;
+                if (self.crouching) {
+                    accel = 0.25;
+                } else {
+                    accel = 0.4;
+                }
             } else if (self.input.input_x != 0) {
                 target = 1;
                 accel = 0.2;
@@ -216,6 +270,8 @@ pub fn update(self: *Player) void {
             self.game_object.speed_x = approach(self.game_object.speed_x, @as(f32, @floatFromInt(self.input.input_x)) * target, accel);
 
             if (!on_ground) {
+                self.recharging = false;
+                self.t_recharge = 0;
                 const fast_fall: f32 = if (self.input.input_y == 1) 2.6 else 2;
                 if (self.input.input_x != 0) {
                     sliding = self.game_object.check_solid(self.input.input_x, 0);
@@ -229,7 +285,15 @@ pub fn update(self: *Player) void {
                     self.game_object.speed_y = @min(self.game_object.speed_y + 0.8, max);
                 }
             } else {
-                self.can_dash = true;
+                if (!self.can_dash and self.t_recharge == 0) {
+                    if (self.recharging) {
+                        self.recharging = false;
+                        self.can_dash = true;
+                    } else {
+                        self.recharging = true;
+                        self.t_recharge = 6;
+                    }
+                }
             }
 
             if (self.t_var_jump > 0) {
@@ -248,13 +312,12 @@ pub fn update(self: *Player) void {
                     self.wall_jump(-self.input.input_x);
                 }
             }
+            if (self.input.input_gun_pressed > 0) {
+                if (self.t_shoot_cooldown == 0)
+                    self.shoot();
+            }
             if (self.input.input_action_pressed > 0) {
                 switch (self.mode) {
-                    .shoot => {
-                        if (self.t_shoot_cooldown == 0) {
-                            self.shoot();
-                        }
-                    },
                     .grapple => {},
                     .dash => {
                         if (self.can_dash)
@@ -264,22 +327,27 @@ pub fn update(self: *Player) void {
                 }
             }
         },
-        .dash => dash: {
+        .dash => {
             self.t_dash_time -= 1;
-            if (self.t_dash_time == 0) {
-                self.end_dash();
-                break :dash;
+
+            if (self.down_dash and on_ground) {
+                self.crouching = true;
             }
 
             if (self.input.input_jump_pressed > 0) {
-                const touch_wall = self.touching_wall();
-
-                // prefer wall bounce over jump
-                if (touch_wall != 0 and !on_ground) {
-                    self.wall_bounce(touch_wall);
-                } else if (self.t_jump_grace > 0) {
-                    self.dash_jump();
+                if (self.t_jump_grace > 0) {
+                    if (self.crouching) {
+                        self.dash_jump(on_ground);
+                    } else {
+                        self.super_dash(on_ground);
+                    }
+                } else if (self.touching_wall() != 0) {
+                    // womp womp
+                    self.wall_bounce(self.touching_wall());
                 }
+            }
+            if (self.t_dash_time == 0) {
+                self.end_dash();
             }
         },
         .grapple_start => {},
@@ -321,18 +389,21 @@ pub fn update(self: *Player) void {
             }
         }
     } else if (self.input.input_x != 0) {
-        const frame = @divFloor(self.game_object.game_state.time, 8);
-        self.spr = 513 + @as(i32, @intCast(frame % 4));
+        if (self.crouching) {
+            const frame = @divFloor(self.game_object.game_state.time, 9);
+            self.spr = 560 + @as(i32, @intCast(frame % 3));
+        } else {
+            const frame = @divFloor(self.game_object.game_state.time, 8);
+            self.spr = 513 + @as(i32, @intCast(frame % 4));
+        }
     } else {
-        self.spr = 512;
+        if (self.crouching) {
+            self.spr = 560;
+        } else {
+            self.spr = 512;
+        }
     }
 
-    if ((self.game_object.x > self.game_object.game_state.camera_x + tic80.WIDTH) or (self.game_object.x < self.game_object.game_state.camera_x)) {
-        self.game_object.game_state.target_cam_x = @divFloor(self.game_object.x, tic80.WIDTH) * tic80.WIDTH;
-    }
-    if ((self.game_object.y > self.game_object.game_state.camera_y + tic80.HEIGHT) or (self.game_object.y < self.game_object.game_state.camera_y)) {
-        self.game_object.game_state.target_cam_y = @divFloor(self.game_object.y, tic80.HEIGHT) * tic80.HEIGHT;
-    }
     // object interactions
     {
         var it = self.game_object.game_state.objects.first;
@@ -342,17 +413,22 @@ pub fn update(self: *Player) void {
             switch (obj.special_type) {
                 .crumble => {
                     const crumble: *Crumble = @alignCast(@ptrCast(o.ptr));
-                    if (!crumble.dying and self.game_object.overlaps(o, 0, 1)) {
+                    if (!crumble.dying and obj.overlaps_box(0, 0, self.sniff_zone())) {
                         o.die();
                     }
                 },
                 .fragile => {
-                    if (self.state == .dash and obj.overlaps_box(0, 0, self.game_object.x, self.game_object.y, .{ .x = -1, .y = -1, .w = 10, .h = 10 })) {
+                    if (self.state == .dash and obj.overlaps_box(0, 0, self.sniff_zone())) {
                         const x_dir: i32 = std.math.sign(obj.x - self.game_object.x);
                         self.state = .normal;
                         self.game_object.speed_x = @floatFromInt(2 * -x_dir);
                         self.game_object.speed_y = 4;
                         o.die();
+                    }
+                },
+                .touchable => {
+                    if (o.can_touch(self) and self.game_object.overlaps(o, 0, 0)) {
+                        o.touch(self);
                     }
                 },
                 .none => {},
@@ -413,43 +489,104 @@ pub fn hazard_check(self: *Player, args: HazardArgs) bool {
     }
     return false;
 }
+const CornerCorrectArgs = struct {
+    func: ?*const fn (*Player, i32, i32) bool = null,
+    only_sign: i2 = 1,
+};
+pub fn corner_correct(self: *Player, dir_x: i32, dir_y: i32, side_dist: usize, args: CornerCorrectArgs) bool {
+    const only_sign = args.only_sign;
+    const func = args.func;
+    if (dir_x != 0) {
+        for (1..side_dist) |i| {
+            for ([_]i2{ -1, 1 }) |s| {
+                if (s == -only_sign) {
+                    continue;
+                }
+
+                if (!self.game_object.check_solid(dir_x, @as(i32, @intCast(i)) * s)) {
+                    const res =
+                        if (func) |f| f(self, dir_x, @as(i32, @intCast(i)) * s) else true;
+                    if (res) {
+                        self.game_object.x += dir_x;
+                        self.game_object.y += @as(i32, @intCast(i)) * s;
+                        return true;
+                    }
+                }
+            }
+        }
+    } else if (dir_y != 0) {
+        for (1..side_dist) |i| {
+            for ([_]i2{ -1, 1 }) |s| {
+                if (s == -only_sign) {
+                    continue;
+                }
+                if (!self.game_object.check_solid(@as(i32, @intCast(i)) * s, dir_y)) {
+                    const res =
+                        if (func) |f| f(self, @as(i32, @intCast(i)) * s, dir_y) else true;
+                    if (res) {
+                        self.game_object.x += @as(i32, @intCast(i)) * s;
+                        self.game_object.y += dir_y;
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
+}
+fn correction_func(self: *Player, ox: i32, oy: i32) bool {
+    return !self.hazard_check(.{ .ox = ox, .oy = oy });
+}
 pub fn on_collide_x(self: *Player, moved: i32, target: i32) bool {
+    switch (self.state) {
+        .normal => {
+            if (@as(i2, @intCast(std.math.sign(target))) == self.input.input_x and self.corner_correct(0, 2, 2, .{ .only_sign = -1, .func = &correction_func })) {
+                return false;
+            }
+        },
+        .dash => {
+            if (self.corner_correct(0, 2, 2, .{ .only_sign = 0, .func = &correction_func })) {
+                return false;
+            }
+        },
+        else => {},
+    }
     return GameObject.on_collide_x(&self.game_object, moved, target);
 }
 pub fn on_collide_y(self: *Player, moved: i32, target: i32) bool {
+    if (target < 0 and self.corner_correct(0, -1, 2, .{ .only_sign = 1, .func = &correction_func })) {
+        return false;
+    }
+    if (self.state == .dash and self.corner_correct(0, std.math.sign(target), 4, .{ .only_sign = 0, .func = &correction_func })) {
+        return false;
+    }
+
     self.t_var_jump = 0;
     return GameObject.on_collide_y(&self.game_object, moved, target);
 }
 
 pub fn pallete(player: u2) void {
-    @call(.always_inline, dash_palette, .{ player, false });
+    @call(.always_inline, dash_palette, .{ player, false, false });
 }
 
-pub fn dash_palette(player: u2, dashing_player: bool) void {
-    var baseColor: u4 = 0;
-    switch (player) {
-        0 => {
-            baseColor = 2;
-        },
-        1 => {
-            baseColor = 3;
-        },
-        2 => {
-            baseColor = 5;
-        },
-        3 => {
-            baseColor = 9;
-        },
-    }
-    if (dashing_player) {
-        tic80.PALETTE_MAP.color1 = baseColor + 1;
-        tic80.PALETTE_MAP.color2 = baseColor;
+pub fn dash_palette(player: u2, dashing_player: bool, recharging: bool) void {
+    const baseColor: u4 = switch (player) {
+        0 => if (dashing_player) 9 else 2,
+        1 => if (dashing_player) 1 else 3,
+        // ???
+        2 => 5,
+        3 => 9,
+    };
+    if (recharging) {
+        tic80.PALETTE_MAP.color1 = 12;
     } else {
         tic80.PALETTE_MAP.color1 = baseColor;
-        tic80.PALETTE_MAP.color2 = baseColor + 1;
     }
+    tic80.PALETTE_MAP.color2 = baseColor + 1;
     tic80.PALETTE_MAP.color3 = 12;
 }
+
 pub fn reset_pallete() void {
     tic80.PALETTE_MAP.color1 = 1;
     tic80.PALETTE_MAP.color2 = 2;
@@ -463,10 +600,23 @@ pub fn reset(self: *Player) void {
     self.t_shoot_cooldown = 0;
     self.t_jump_grace = 0;
     self.jump_grace_y = 0;
+    self.t_dash_time = 0;
+    self.game_object.speed_x = 0;
+    self.game_object.speed_y = 0;
 }
+
+pub fn sniff_zone(self: *const Player) types.Box {
+    return .{
+        .x = self.game_object.x - 2,
+        .y = self.game_object.y - 1,
+        .w = 10,
+        .h = 10,
+    };
+}
+
 pub fn draw(self: *Player) void {
     const obj = self.get_object();
-    dash_palette(self.input.player, !self.can_dash);
+    dash_palette(self.input.player, !self.can_dash, self.recharging);
     defer reset_pallete();
     defer tdraw.set4bpp();
     if (self.state == .death) {

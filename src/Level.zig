@@ -7,36 +7,100 @@ const Player = @import("Player.zig");
 const Destructible = @import("Destructible.zig");
 const Spike = @import("Spike.zig");
 const Crumble = @import("Crumble.zig");
+const types = @import("types.zig");
+const Checkpoint = @import("Checkpoint.zig");
 
+pub const CamMode = enum {
+    locked,
+    follow_x,
+    follow_y,
+    free_follow,
+};
+pub const Room = struct {
+    box: types.Box,
+    cam_mode: CamMode = .locked,
+    death_bottom: bool = true,
+    pub fn load_level(self: Room, state: *GameState) *Level {
+        state.loaded_level = .{ .x = self.box.x, .y = self.box.y, .width = self.box.w, .height = self.box.h, .state = state, .cam_mode = self.cam_mode };
+        return &state.loaded_level;
+    }
+};
+pub const rooms = [_]Room{ .{ .box = .{ .x = 0, .y = 0, .w = 30, .h = 17 } }, .{ .box = .{
+    .x = 30,
+    .y = 0,
+    .w = 30,
+    .h = 17,
+} }, .{ .box = .{ .x = 60, .y = 0, .w = 60, .h = 17 }, .cam_mode = .follow_x } };
 height: i32,
 width: i32,
 x: i32,
 y: i32,
-player_x: i32,
-player_y: i32,
+player_x: i32 = 0,
+player_y: i32 = 0,
+cam_mode: CamMode,
 state: *GameState,
 
-pub fn setup(self: *Level) !void {
+pub fn load(self: *Level) !void {
+    self.state.clean();
     try self.init();
+    self.state.snap_cam(self.x * 8, self.y * 8);
+    const player = self.state.players[0];
+    const player_x: i32 = @divFloor(player.game_object.x, 8);
+    const player_y: i32 = @divFloor(player.game_object.y, 8);
+    player_spawn: {
+        var di: i32 = 1;
+        var dj: i32 = 0;
+        var segment_length: i32 = 1;
+
+        var i: i32 = player_x;
+        var j: i32 = player_y;
+        var segment_passed: i32 = 0;
+        const max_size = @max(self.width, self.height);
+        const points = max_size * max_size;
+        var k: i32 = 0;
+        while (k < points) : (k += 1) {
+            if (i >= self.x and i <= self.x + self.width and j >= self.y and j <= self.y + self.height and tic.mget(i, j) == 16) {
+                self.player_x = i;
+                self.player_y = j;
+                break :player_spawn;
+            }
+            i += di;
+            j += dj;
+
+            segment_passed += 1;
+
+            if (segment_passed == segment_length) {
+                segment_passed = 0;
+
+                const buf = di;
+                di = -dj;
+                dj = buf;
+
+                if (dj == 0) {
+                    segment_length += 1;
+                }
+            }
+        }
+        // YIPDEE!
+        self.player_x = player_x;
+        self.player_y = player_y;
+    }
+}
+pub fn start(self: *Level) !void {
+    self.state.clean();
+    try self.init();
+    self.state.snap_cam(self.x * 8, self.y * 8);
     for (self.state.players) |player| {
         player.game_object.x = self.player_x * 8;
         player.game_object.y = self.player_y * 8;
     }
-    self.state.camera_x = self.x;
-    self.state.camera_y = self.y;
-    self.state.target_cam_x = self.x;
-    self.state.target_cam_y = self.y;
-}
-pub fn test_level(state: *GameState) *Level {
-    state.loaded_level = .{ .x = 0, .y = 0, .width = 60, .height = 17, .player_x = 1, .player_y = 13, .state = state };
-    return &state.loaded_level;
 }
 
 pub fn init(self: *Level) !void {
     var y = self.y;
-    while (y <= self.height) : (y += 1) {
+    while (y <= self.y + self.height) : (y += 1) {
         var x = self.x;
-        while (x <= self.width) : (x += 1) {
+        while (x <= self.x + self.width) : (x += 1) {
             switch (tic.mget(x, y)) {
                 7 => {
                     _ = try Crumble.create(self.state.allocator, self.state, x * 8, y * 8);
@@ -47,9 +111,14 @@ pub fn init(self: *Level) !void {
                 51, 52, 53, 54 => |it| {
                     _ = try Spike.create(self.state.allocator, self.state, x * 8, y * 8, @enumFromInt(@as(u2, @intCast(it - 51))));
                 },
+                48 => {
+                    _ = try Checkpoint.create(self.state.allocator, self.state, x, y);
+                },
                 16 => {
-                    self.player_x = x;
-                    self.player_y = y;
+                    if (self.player_x == 0 and self.player_y == 0) {
+                        self.player_x = x;
+                        self.player_y = y;
+                    }
                 },
                 else => {},
             }
@@ -57,6 +126,16 @@ pub fn init(self: *Level) !void {
     }
 }
 pub fn reset(self: *Level) !void {
-    self.state.clean();
-    try self.setup();
+    try self.start();
+}
+
+pub fn find_at(world_x: i32, world_y: i32) ?Room {
+    const tile_x: i32 = @divFloor(world_x, 8);
+    const tile_y: i32 = @divFloor(world_y, 8);
+    for (rooms) |room| {
+        if (room.box.contains(tile_x, tile_y)) {
+            return room;
+        }
+    }
+    return null;
 }

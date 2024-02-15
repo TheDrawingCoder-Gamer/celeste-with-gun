@@ -20,10 +20,11 @@ export fn BOOT() void {
     buddy2 = Buddy2Allocator.init(&buffer);
     allocator = buddy2.allocator();
 
-    game_state = GameState.init(allocator, &.{&player});
+    game_state = GameState.init(allocator, &.{&player}, &audio);
     input_1 = .{ .player = 0 };
     player = Player.create(allocator, &game_state, 2 * 8, 12 * 8, &input_1, &audio) catch unreachable;
-    Level.test_level(&game_state).setup() catch unreachable;
+    player.host = true;
+    Level.rooms[0].load_level(&game_state).start() catch unreachable;
     //for (Audio.music_patterns, 0..) |pattern, i| {
     //    tic.tracef("{d}, {any}", .{ i, pattern.get(0) });
     //}
