@@ -45,12 +45,15 @@ pub fn draw(self: *Bullet) void {
     Player.reset_pallete();
     tdraw.set4bpp();
 }
+
 fn die_on_collide(self: *Bullet, moved: i32, target: i32) bool {
     _ = moved;
     _ = target;
     const item = self.game_object.first_overlap(self.direction.axis_x(), self.direction.axis_y());
     if (item) |obj| {
-        obj.die();
+        if (obj.obj().shootable) {
+            obj.shot();
+        }
     }
     self.game_object.destroyed = true;
     return true;
@@ -58,6 +61,18 @@ fn die_on_collide(self: *Bullet, moved: i32, target: i32) bool {
 pub fn update(self: *Bullet) void {
     _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&die_on_collide));
     _ = vtable.move_y(self, self.game_object.speed_y, @ptrCast(&die_on_collide));
+    {
+        var it = self.game_object.game_state.objects.first;
+        while (it) |node| : (it = node.next) {
+            var obj = node.data;
+            const gameobj = obj.obj();
+            if (gameobj.shootable and !gameobj.destroyed and self.game_object.overlaps(obj, 0, 0)) {
+                obj.shot();
+                self.game_object.destroyed = true;
+                return;
+            }
+        }
+    }
 }
 
 fn get_object(self: *Bullet) *GameObject {

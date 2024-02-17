@@ -22,7 +22,7 @@ voice: *Voice,
 
 pub fn create(allocator: Allocator, state: *GameState, tile_x: i32, tile_y: i32) !*Checkpoint {
     var obj = GameObject.create(state, tile_x * 8, tile_y * 8);
-    obj.special_type = .touchable;
+    obj.touchable = true;
     const self = try allocator.create(Checkpoint);
     self.game_object = obj;
     self.tile_x = tile_x;

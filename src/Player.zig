@@ -335,15 +335,16 @@ pub fn update(self: *Player) void {
             }
 
             if (self.input.input_jump_pressed > 0) {
-                if (self.t_jump_grace > 0) {
+                if (!on_ground and self.touching_wall() != 0) {
+
+                    // womp womp
+                    self.wall_bounce(self.touching_wall());
+                } else if (self.t_jump_grace > 0) {
                     if (self.crouching) {
                         self.dash_jump(on_ground);
                     } else {
                         self.super_dash(on_ground);
                     }
-                } else if (self.touching_wall() != 0) {
-                    // womp womp
-                    self.wall_bounce(self.touching_wall());
                 }
             }
             if (self.t_dash_time == 0) {
@@ -410,28 +411,11 @@ pub fn update(self: *Player) void {
         while (it) |node| : (it = node.next) {
             const o = node.data;
             const obj = o.obj();
-            switch (obj.special_type) {
-                .crumble => {
-                    const crumble: *Crumble = @alignCast(@ptrCast(o.ptr));
-                    if (!crumble.dying and obj.overlaps_box(0, 0, self.sniff_zone())) {
-                        o.die();
-                    }
-                },
-                .fragile => {
-                    if (self.state == .dash and obj.overlaps_box(0, 0, self.sniff_zone())) {
-                        const x_dir: i32 = std.math.sign(obj.x - self.game_object.x);
-                        self.state = .normal;
-                        self.game_object.speed_x = @floatFromInt(2 * -x_dir);
-                        self.game_object.speed_y = 4;
-                        o.die();
-                    }
-                },
-                .touchable => {
-                    if (o.can_touch(self) and self.game_object.overlaps(o, 0, 0)) {
-                        o.touch(self);
-                    }
-                },
-                .none => {},
+
+            if (obj.touchable) {
+                if (o.can_touch(self) and obj.overlaps_box(0, 0, self.sniff_zone())) {
+                    o.touch(self);
+                }
             }
         }
     }
@@ -635,4 +619,5 @@ pub fn draw(self: *Player) void {
     const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
+    _ = tic80.printf("{any}", .{self.game_object.speed_x}, 0, 0, .{});
 }

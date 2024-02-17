@@ -38,6 +38,9 @@ pub const IsGameObject = struct {
     pub fn can_touch(self: *const IsGameObject, player: *Player) bool {
         return self.table.can_touch(self.ptr, player);
     }
+    pub fn shot(self: *const IsGameObject) void {
+        self.table.shot(self.ptr);
+    }
 };
 pub const VTable = struct {
     get_object: *const fn (self: *anyopaque) *GameObject,
@@ -47,6 +50,7 @@ pub const VTable = struct {
     destroy: *const fn (self: *anyopaque, allocator: std.mem.Allocator) void,
     touch: *const fn (self: *anyopaque, player: *Player) void = &GameObject.noTouch,
     can_touch: *const fn (self: *anyopaque, player: *Player) bool = &GameObject.noCanTouch,
+    shot: *const fn (self: *anyopaque) void = &noShot,
     pub fn move_x(self: *const VTable, item: *anyopaque, x: f32, on_collide: ?*const fn (*anyopaque, moved: i32, target: i32) bool) bool {
         var gobj = self.get_object(item);
         gobj.remainder_x += x;
@@ -93,7 +97,7 @@ pub const VTable = struct {
     }
 };
 
-pub const SpecialType = enum { crumble, fragile, touchable, none };
+pub const SpecialType = enum { sheild_toggle, sheild_door, none };
 speed_x: f32 = 0,
 speed_y: f32 = 0,
 remainder_x: f32 = 0,
@@ -110,6 +114,8 @@ y: i32,
 id: i64,
 destroyed: bool = false,
 special_type: SpecialType = .none,
+touchable: bool = false,
+shootable: bool = false,
 game_state: *GameState,
 // will never be freed on cleanup
 persistent: bool = false,
@@ -227,7 +233,14 @@ pub fn noCanTouch(ctx: *anyopaque, player: *Player) bool {
     _ = player;
     return false;
 }
+// me to anyone who gives me the slightest bit of attention
+pub fn yesCanTouch(ctx: *anyopaque, player: *Player) bool {
+    _ = ctx;
+    _ = player;
+    return true;
+}
 pub const noDraw = noUpdate;
+pub const noShot = noUpdate;
 pub fn debug_draw_hitbox(self: *GameObject) void {
     tic80.rectb(self.x + self.hit_x, self.y + self.hit_y, self.hit_w, self.hit_h, 1);
 }

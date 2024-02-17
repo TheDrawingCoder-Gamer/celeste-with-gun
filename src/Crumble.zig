@@ -4,10 +4,11 @@ const tdraw = @import("draw.zig");
 const tic = @import("tic80.zig");
 const GameObject = @import("GameObject.zig");
 const GameState = @import("GameState.zig");
+const Player = @import("Player.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const vtable: GameObject.VTable = .{ .ptr_draw = &draw, .destroy = &destroy, .get_object = &get_object, .ptr_update = &update, .ptr_die = &die };
+const vtable: GameObject.VTable = .{ .ptr_draw = &draw, .destroy = &destroy, .get_object = &get_object, .ptr_update = &update, .can_touch = &can_touch, .touch = &touch, .shot = &shot };
 
 game_object: GameObject,
 t_alive: u8 = 0,
@@ -64,16 +65,31 @@ fn get_object(ctx: *anyopaque) *GameObject {
     return &self.game_object;
 }
 
-fn die(ctx: *anyopaque) void {
-    const self: *Crumble = @alignCast(@ptrCast(ctx));
+fn die(self: *Crumble) void {
     self.dying = true;
     tic.sfx(6, .{ .volume = 6, .duration = 8 });
 }
 
+fn shot(ctx: *anyopaque) void {
+    die(@alignCast(@ptrCast(ctx)));
+}
+fn touch(ctx: *anyopaque, player: *Player) void {
+    _ = player;
+    const self: *Crumble = @alignCast(@ptrCast(ctx));
+    self.die();
+}
+fn can_touch(ctx: *anyopaque, player: *Player) bool {
+    _ = player;
+    const self: *Crumble = @alignCast(@ptrCast(ctx));
+
+    return !self.dying;
+}
+
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32) !*Crumble {
     var obj = GameObject.create(state, x, y);
-    obj.special_type = .crumble;
     obj.solid = true;
+    obj.shootable = true;
+    obj.touchable = true;
 
     const self = try allocator.create(Crumble);
     self.* = .{

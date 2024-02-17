@@ -7,7 +7,7 @@ const Buddy2Allocator = @import("buddy2").Buddy2Allocator(.{});
 const Level = @import("Level.zig");
 const Audio = @import("Audio.zig");
 
-var buffer: [65536 * 2]u8 = undefined;
+var buffer: [65536]u8 = undefined;
 var game_state: GameState = undefined;
 var input_1: Input = undefined;
 var audio: Audio.Voice = .{ .channel = 3 };

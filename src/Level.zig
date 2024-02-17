@@ -9,6 +9,8 @@ const Spike = @import("Spike.zig");
 const Crumble = @import("Crumble.zig");
 const types = @import("types.zig");
 const Checkpoint = @import("Checkpoint.zig");
+const Switch = @import("Switch.zig");
+const SwitchDoor = @import("SwitchDoor.zig");
 
 pub const CamMode = enum {
     locked,
@@ -107,6 +109,16 @@ pub fn init(self: *Level) !void {
                 },
                 35 => {
                     _ = try Destructible.create(self.state.allocator, x, y, self.state);
+                },
+                17, 18, 19 => |it| {
+                    const res = it - 16;
+                    const touching = res & 0b10 != 0;
+                    const shootable = res & 0b1 != 0;
+
+                    _ = try Switch.create(self.state.allocator, self.state, x * 8, y * 8, .{ .is_gun = shootable, .is_touch = touching });
+                },
+                20 => {
+                    _ = try SwitchDoor.create(self.state.allocator, self.state, x * 8, y * 8, 0);
                 },
                 51, 52, 53, 54 => |it| {
                     _ = try Spike.create(self.state.allocator, self.state, x * 8, y * 8, @enumFromInt(@as(u2, @intCast(it - 51))));
