@@ -71,8 +71,8 @@ fn activated(self: *Switch) void {
             switch (obj.special_type) {
                 .sheild_door => {
                     const other: *SwitchDoor = @alignCast(@ptrCast(d.ptr));
-                    if (other.kind == self.kind) {
-                        obj.destroyed = true;
+                    if (!other.active and other.kind == self.kind) {
+                        other.activated();
                     }
                 },
                 else => {},

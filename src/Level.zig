@@ -18,21 +18,44 @@ pub const CamMode = enum {
     follow_y,
     free_follow,
 };
+
+pub const Entity = struct {
+    pub const Kind = union(enum) {
+        const SwitchBlock = struct {
+            kind: u8,
+            shootable: bool,
+            touchable: bool,
+        };
+        const Door = struct {
+            kind: u8,
+            w: u16,
+            h: u16,
+            target: types.Point,
+        };
+        switch_block: SwitchBlock,
+        switch_door: Door,
+    };
+    x: i32,
+    y: i32,
+    kind: Kind,
+};
 pub const Room = struct {
     box: types.Box,
     cam_mode: CamMode = .locked,
     death_bottom: bool = true,
+    entities: ?[]const Entity = null,
     pub fn load_level(self: Room, state: *GameState) *Level {
-        state.loaded_level = .{ .x = self.box.x, .y = self.box.y, .width = self.box.w, .height = self.box.h, .state = state, .cam_mode = self.cam_mode };
+        state.loaded_level = .{ .x = self.box.x, .y = self.box.y, .width = self.box.w, .height = self.box.h, .state = state, .cam_mode = self.cam_mode, .entities = self.entities };
         return &state.loaded_level;
     }
 };
+const level3_entities = [_]Entity{.{ .x = 74 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 1, .h = 4, .target = .{ .x = 74 * 8, .y = 10 * 8 } } } }};
 pub const rooms = [_]Room{ .{ .box = .{ .x = 0, .y = 0, .w = 30, .h = 17 } }, .{ .box = .{
     .x = 30,
     .y = 0,
     .w = 30,
     .h = 17,
-} }, .{ .box = .{ .x = 60, .y = 0, .w = 60, .h = 17 }, .cam_mode = .follow_x } };
+} }, .{ .box = .{ .x = 60, .y = 0, .w = 60, .h = 17 }, .cam_mode = .follow_x, .entities = &level3_entities } };
 height: i32,
 width: i32,
 x: i32,
@@ -41,6 +64,7 @@ player_x: i32 = 0,
 player_y: i32 = 0,
 cam_mode: CamMode,
 state: *GameState,
+entities: ?[]const Entity = null,
 
 pub fn load(self: *Level) !void {
     self.state.clean();
@@ -117,9 +141,9 @@ pub fn init(self: *Level) !void {
 
                     _ = try Switch.create(self.state.allocator, self.state, x * 8, y * 8, .{ .is_gun = shootable, .is_touch = touching });
                 },
-                20 => {
-                    _ = try SwitchDoor.create(self.state.allocator, self.state, x * 8, y * 8, 0);
-                },
+                //20 => {
+                //    _ = try SwitchDoor.create(self.state.allocator, self.state, x * 8, y * 8, .{ .target = .{ .x = }});
+                //},
                 51, 52, 53, 54 => |it| {
                     _ = try Spike.create(self.state.allocator, self.state, x * 8, y * 8, @enumFromInt(@as(u2, @intCast(it - 51))));
                 },
@@ -133,6 +157,19 @@ pub fn init(self: *Level) !void {
                     }
                 },
                 else => {},
+            }
+        }
+    }
+
+    if (self.entities) |entities| {
+        for (entities) |entity| {
+            switch (entity.kind) {
+                .switch_block => |block| {
+                    _ = try Switch.create(self.state.allocator, self.state, entity.x, entity.y, .{ .is_gun = block.shootable, .is_touch = block.touchable, .kind = block.kind });
+                },
+                .switch_door => |door| {
+                    _ = try SwitchDoor.create(self.state.allocator, self.state, entity.x, entity.y, .{ .kind = door.kind, .w = door.w, .h = door.h, .target = door.target });
+                },
             }
         }
     }

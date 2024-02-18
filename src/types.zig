@@ -1,5 +1,13 @@
 pub const Point = struct { x: i32 = 0, y: i32 = 0 };
 
+pub fn approach(x: anytype, target: anytype, max_delta: anytype) @TypeOf(x, target, max_delta) {
+    return if (x < target) @min(x + max_delta, target) else @max(x - max_delta, target);
+}
+
+pub fn lerp(min: f32, max: f32, t: f32) f32 {
+    return (1 - t) * min + t * max;
+}
+
 pub const Box = struct {
     x: i32,
     y: i32,
