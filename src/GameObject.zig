@@ -166,6 +166,9 @@ pub const VTable = struct {
                         gobj.move_raw(moved.with_y(0).times(-1));
                     }
                 }
+                if (gobj.check_solid(0, 0)) {
+                    gobj.move_raw(moved.times(-1));
+                }
             }
         }
     }

@@ -136,7 +136,7 @@ pub const raw = struct {
     pub extern fn peek4(addr4: u32) u8;
     pub extern fn peek2(addr2: u32) u8;
     pub extern fn peek1(bitaddr: u32) u8;
-    pub extern fn pix(x: i32, y: i32, color: i32) void;
+    pub extern fn pix(x: i32, y: i32, color: i8) u8;
     pub extern fn pmem(index: u32, value: i64) u32;
     pub extern fn poke(addr: u32, value: u8, bits: i32) void;
     pub extern fn poke4(addr4: u32, value: u8) void;
@@ -243,12 +243,12 @@ pub fn map(args: MapArgs) void {
     raw.map(args.x, args.y, args.w, args.h, args.sx, args.sy, colors, color_count, args.scale, if (remap_args) |it| &it else null);
 }
 
-pub fn pix(x: i32, y: i32, color: u8) void {
-    raw.pix(x, y, color);
+pub fn pix(x: i32, y: i32, color: u4) void {
+    _ = raw.pix(x, y, color);
 }
 
 pub fn getpix(x: i32, y: i32) u8 {
-    raw.pix(x, y, -1);
+    return raw.pix(x, y, -1);
 }
 
 // pub extern fn spr(id: i32, x: i32, y: i32, trans_colors: [*]u8, color_count: i32, scale: i32, flip: i32, rotate: i32, w: i32, h: i32) void;

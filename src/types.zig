@@ -127,6 +127,18 @@ pub const Box = struct {
             .{ .start = Point.as_float(.{ .x = self.x, .y = self.y + self.h }), .end = Point.as_float(.{ .x = self.x + self.w, .y = self.y + self.h }) },
         };
     }
+    pub fn top_left(self: Box) Point {
+        return .{ .x = self.x, .y = self.y };
+    }
+    pub fn top_right(self: Box) Point {
+        return .{ .x = self.x + self.w, .y = self.y };
+    }
+    pub fn bottom_left(self: Box) Point {
+        return .{ .x = self.x, .y = self.y + self.h };
+    }
+    pub fn bottom_right(self: Box) Point {
+        return .{ .x = self.x + self.w, .y = self.y + self.h };
+    }
 };
 
 pub const Direction = enum(u2) { up = 0, right = 1, down = 2, left = 3 };
