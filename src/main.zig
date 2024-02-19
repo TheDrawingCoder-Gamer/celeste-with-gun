@@ -12,7 +12,6 @@ var game_state: GameState = undefined;
 var input_1: Input = undefined;
 var audio: Audio.Voice = .{ .channel = 3 };
 var aux_audio: Audio.Voice = .{ .channel = 2 };
-var player: Player = undefined;
 var buddy2: Buddy2Allocator = undefined;
 // var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
 
@@ -21,10 +20,8 @@ export fn BOOT() void {
     buddy2 = Buddy2Allocator.init(&buffer);
     allocator = buddy2.allocator();
 
-    game_state = GameState.init(allocator, &.{&player}, &audio, &aux_audio);
     input_1 = .{ .player = 0 };
-    player = Player.create(allocator, &game_state, 2 * 8, 12 * 8, &input_1, &audio) catch unreachable;
-    player.host = true;
+    game_state = GameState.init(allocator, &input_1, &audio, &aux_audio);
     Level.rooms[0].load_level(&game_state).start() catch unreachable;
     //for (Audio.music_patterns, 0..) |pattern, i| {
     //    tic.tracef("{d}, {any}", .{ i, pattern.get(0) });
@@ -47,7 +44,9 @@ export fn MENU(index: i32) void {
     const item: MenuItem = @enumFromInt(index);
     switch (item) {
         .retry => {
-            player.die();
+            if (game_state.player) |p| {
+                p.die();
+            }
         },
         _ => {},
     }

@@ -8,6 +8,7 @@ const Player = @import("Player.zig");
 const Screenwipe = @import("Screenwipe.zig");
 const types = @import("types.zig");
 const Voice = @import("Audio.zig").Voice;
+const Input = @import("Input.zig");
 
 pub const ObjectList = std.DoublyLinkedList(GameObject.IsGameObject);
 
@@ -18,17 +19,19 @@ camera_x: i32 = 0,
 camera_y: i32 = 0,
 pan_speed: i16 = 5,
 loaded_level: Level = undefined,
-players: []const *Player,
+input: *Input,
 screenwipe: Screenwipe = .{},
 panning: bool = false,
 current_player_spawn: types.Point = .{ .x = 0, .y = 0 },
 voice: *Voice,
 // voice for extra effects
 aux_voice: *Voice,
+player: ?*Player = null,
+reset_scheduled: bool = false,
 
-pub fn init(allocator: std.mem.Allocator, players: []const *Player, voice: *Voice, aux_voice: *Voice) GameState {
+pub fn init(allocator: std.mem.Allocator, input: *Input, voice: *Voice, aux_voice: *Voice) GameState {
     const list: std.DoublyLinkedList(GameObject.IsGameObject) = .{};
-    return .{ .allocator = allocator, .objects = list, .players = players, .voice = voice, .aux_voice = aux_voice };
+    return .{ .allocator = allocator, .objects = list, .input = input, .voice = voice, .aux_voice = aux_voice };
 }
 
 pub fn wrap_node(self: *GameState, table: GameObject.IsGameObject) !*ObjectList.Node {
@@ -41,10 +44,13 @@ pub fn draw_spr(self: *GameState, id: i32, world_x: i32, world_y: i32, args: tic
     tic.spr(id, world_x - self.camera_x, world_y - self.camera_y, args);
 }
 
-pub fn clean(self: *GameState) void {
+pub fn clean(self: *GameState, kill_player: bool) void {
     var it = self.objects.first;
+    if (kill_player) {
+        self.player = null;
+    }
     while (it) |node| : (it = node.next) {
-        if (!node.data.obj().persistent) {
+        if (kill_player or node.data.obj().special_type != .player) {
             self.objects.remove(node);
             node.data.destroy(self.allocator);
             self.allocator.destroy(node);
@@ -89,17 +95,6 @@ pub fn center_y(self: *GameState, on: i32) void {
     }
 }
 
-pub fn forall_objects(self: *GameState, data: *anyopaque, func: *const fn (*anyopaque, GameObject.IsGameObject) void) void {
-    {
-        var it = self.objects.first;
-        while (it) |node| : (it = node.next) {
-            func(data, node.data);
-        }
-    }
-    for (self.players) |player| {
-        func(data, .{ .ptr = @ptrCast(player), .table = Player.vtable });
-    }
-}
 pub fn loop(self: *GameState) void {
     tic.cls(13);
     const should_update = self.screenwipe.infade > 45 and !self.panning and self.screenwipe.level_wipe > 45;
@@ -124,14 +119,11 @@ pub fn loop(self: *GameState) void {
             }
         }
     }
-    for (self.players) |player| {
-        if (should_update)
-            player.update();
-        player.draw();
+    if (self.player) |player| player: {
         if (player.game_object.y > (self.loaded_level.y + self.loaded_level.height) * 8) {
             if (player.state != .death) {
                 player.die();
-                continue;
+                break :player;
             }
         }
 
@@ -156,20 +148,25 @@ pub fn loop(self: *GameState) void {
     self.screenwipe.update();
     self.screenwipe.draw();
     self.time += 1;
-
-    switch (self.loaded_level.cam_mode) {
-        .locked => {},
-        .follow_x => {
-            self.center_x(self.players[0].game_object.x);
-        },
-        .follow_y => {
-            self.center_y(self.players[0].game_object.y);
-        },
-        .free_follow => {
-            const host = self.players[0];
-            self.center_x(host.game_object.x);
-            self.center_y(host.game_object.y);
-        },
+    if (self.player) |player| {
+        switch (self.loaded_level.cam_mode) {
+            .locked => {},
+            .follow_x => {
+                self.center_x(player.game_object.x);
+            },
+            .follow_y => {
+                self.center_y(player.game_object.y);
+            },
+            .free_follow => {
+                const host = player;
+                self.center_x(host.game_object.x);
+                self.center_y(host.game_object.y);
+            },
+        }
+    }
+    if (self.reset_scheduled) {
+        self.loaded_level.reset() catch unreachable;
+        self.reset_scheduled = false;
     }
 }
 const RaycastInfo = struct {
@@ -242,12 +239,64 @@ pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32)
         }
     }
 
-    var info: RaycastInfo = .{ .closest = &closest, .box = box, .ray_segment = ray_segment, .point = &point };
+    _ = self;
+    // var info: RaycastInfo = .{ .closest = &closest, .box = box, .ray_segment = ray_segment, .point = &point };
 
-    self.forall_objects(@ptrCast(&info), &raycast_foreach);
+    // self.forall_objects(@ptrCast(&info), &raycast_foreach);
 
     if (closest) |c| {
         return .{ .pos = point, .distance = std.math.sqrt(c), .angle = std.math.pi + angle };
     }
     return null;
+}
+
+pub fn check_solid_box(self: *GameState, box: types.Box) bool {
+    var i: i32 = @divFloor(box.x, 8);
+
+    const imax = @divFloor(box.x + box.w - 1, 8);
+    const jmin = @divFloor(box.y, 8);
+    const jmax = @divFloor(box.y + box.h - 1, 8);
+    while (i <= imax) : (i += 1) {
+        var j: i32 = jmin;
+        while (j <= jmax) : (j += 1) {
+            if (tic.fget(tic.mget(i, j), 0)) {
+                return true;
+            }
+        }
+    }
+
+    {
+        // ignore player
+        var it = self.objects.first;
+        while (it) |node| : (it = node.next) {
+            var obj = node.data;
+            const gameobj = obj.obj();
+            if (gameobj.solid and !gameobj.destroyed and gameobj.overlaps_box(0, 0, box)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+pub fn check_solid_point(self: *GameState, point: types.Point) bool {
+    const i = @divFloor(point.x, 8);
+    const j = @divFloor(point.y, 8);
+    if (tic.fget(tic.mget(i, j), 0)) {
+        return true;
+    }
+
+    {
+        var it = self.objects.first;
+        while (it) |node| : (it = node.next) {
+            var obj = node.data;
+            const gameobj = obj.obj();
+            if (gameobj.solid and !gameobj.destroyed and gameobj.world_hitbox().contains(point.x, point.y)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }

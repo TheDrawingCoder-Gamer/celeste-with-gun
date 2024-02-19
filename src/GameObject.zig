@@ -193,7 +193,7 @@ pub const IRide = struct {
     }
 };
 
-pub const SpecialType = enum { sheild_toggle, sheild_door, none };
+pub const SpecialType = enum { sheild_toggle, sheild_door, player, none };
 speed_x: f32 = 0,
 speed_y: f32 = 0,
 remainder_x: f32 = 0,
@@ -275,12 +275,6 @@ pub fn first_overlap(self: *GameObject, ox: i32, oy: i32) ?IsGameObject {
         const gameobj = obj.obj();
         if (gameobj != self and !gameobj.destroyed and self.overlaps(obj, ox, oy)) {
             return obj;
-        }
-    }
-    for (self.game_state.players) |player| {
-        const player_table = .{ .ptr = player, .table = Player.vtable };
-        if (&player.game_object != self and self.overlaps(player_table, ox, oy)) {
-            return player_table;
         }
     }
     return null;

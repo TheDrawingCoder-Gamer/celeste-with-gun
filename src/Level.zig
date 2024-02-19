@@ -67,10 +67,10 @@ state: *GameState,
 entities: ?[]const Entity = null,
 
 pub fn load(self: *Level) !void {
-    self.state.clean();
+    self.state.clean(false);
     try self.init();
     self.state.snap_cam(self.x * 8, self.y * 8);
-    const player = self.state.players[0];
+    const player = self.state.player orelse return;
     const player_x: i32 = @divFloor(player.game_object.x, 8);
     const player_y: i32 = @divFloor(player.game_object.y, 8);
     player_spawn: {
@@ -113,13 +113,10 @@ pub fn load(self: *Level) !void {
     }
 }
 pub fn start(self: *Level) !void {
-    self.state.clean();
+    self.state.clean(true);
     try self.init();
     self.state.snap_cam(self.x * 8, self.y * 8);
-    for (self.state.players) |player| {
-        player.game_object.x = self.player_x * 8;
-        player.game_object.y = self.player_y * 8;
-    }
+    self.state.player = try Player.create(self.state.allocator, self.state, self.player_x * 8, self.player_y * 8, self.state.input, self.state.voice);
 }
 
 pub fn init(self: *Level) !void {

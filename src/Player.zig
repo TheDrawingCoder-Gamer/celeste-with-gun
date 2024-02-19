@@ -50,7 +50,7 @@ recharging: bool = false,
 t_platform_velocity_storage: u8 = 0,
 platform_velocity: types.PointF = .{ .x = 0, .y = 0 },
 
-pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !Player {
+pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !*Player {
     var obj = GameObject.create(state, x, y);
     // obj.x += 4;
     // obj.y += 8;
@@ -60,8 +60,15 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *I
     obj.hit_w = 5;
     obj.hit_h = 6;
     obj.persistent = true;
+    obj.special_type = .player;
 
-    return .{ .game_object = obj, .input = input, .allocator = allocator, .voice = voice };
+    const self = try allocator.create(Player);
+
+    self.* = .{ .game_object = obj, .input = input, .allocator = allocator, .voice = voice };
+
+    const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
+    state.objects.append(node);
+    return self;
 }
 
 fn destroy(self: *Player, allocator: Allocator) void {
@@ -372,8 +379,8 @@ pub fn update(self: *Player) void {
             self.t_death += 1;
             self.game_object.game_state.screenwipe.wipe_timer += 1;
             if (self.game_object.game_state.screenwipe.wipe_timer > 40) {
-                self.game_object.game_state.loaded_level.reset() catch unreachable;
-                self.reset();
+                // this will destroy us!
+                self.game_object.game_state.reset_scheduled = true;
             }
             return;
         },
