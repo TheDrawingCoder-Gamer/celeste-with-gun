@@ -49,7 +49,7 @@ pub const Room = struct {
         return &state.loaded_level;
     }
 };
-const level3_entities = [_]Entity{.{ .x = 74 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 1, .h = 4, .target = .{ .x = 74 * 8, .y = 10 * 8 } } } }};
+const level3_entities = [_]Entity{.{ .x = 68 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 4, .h = 1, .target = .{ .x = 98 * 8, .y = 15 * 8 } } } }};
 pub const rooms = [_]Room{ .{ .box = .{ .x = 0, .y = 0, .w = 30, .h = 17 } }, .{ .box = .{
     .x = 30,
     .y = 0,

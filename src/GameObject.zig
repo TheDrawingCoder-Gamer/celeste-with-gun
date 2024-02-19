@@ -26,6 +26,9 @@ pub const IsGameObject = struct {
     pub fn move_y(self: *const IsGameObject, y: f32, on_collide: ?*const fn (*anyopaque, i32, i32) bool) bool {
         return self.table.move_y(self.ptr, y, on_collide);
     }
+    pub fn move(self: *const IsGameObject, delta: types.PointF, args: VTable.MoveArgs) void {
+        self.table.move(self.ptr, delta, args);
+    }
     pub fn die(self: *const IsGameObject) void {
         self.table.ptr_die(self.ptr);
     }
@@ -101,6 +104,70 @@ pub const VTable = struct {
         }
 
         return false;
+    }
+    pub const MoveArgs = struct {
+        vert_bonk: ?*const fn (*anyopaque, moved: types.PointF, target: types.PointF) bool = null,
+        wall_bonk: ?*const fn (*anyopaque, moved: types.PointF, target: types.PointF) bool = null,
+    };
+    pub fn move(self: *const VTable, item: *anyopaque, delta: types.PointF, args: MoveArgs) void {
+        var gobj = self.get_object(item);
+
+        if (delta.length_squared() <= 0) {
+            // ???
+            return;
+        }
+
+        var remaining = delta.length();
+        const step_size: f32 = @max(1, remaining / 32);
+        const step_normal = delta.times(1 / remaining);
+
+        while (remaining > 0) {
+            const move_start = gobj.point();
+            const step = @min(remaining, step_size);
+            remaining -= step;
+            gobj.move_raw(step_normal.times(step));
+            const move_end = gobj.point();
+
+            if (gobj.check_solid(0, 0)) chk_solid: {
+                const moved = move_end.add(move_start.times(-1));
+                const y_int: i32 = @intFromFloat(std.math.ceil(types.abs(moved.y)));
+                const x_int: i32 = @intFromFloat(std.math.ceil(types.abs(moved.x)));
+                // ceiling...
+                // hack with step_size. may break at extremely high speeds
+                if (y_int != 0) {
+                    if (!gobj.check_solid(0, -y_int)) {
+                        var collided = true;
+                        if (args.vert_bonk) |bonk| {
+                            collided = bonk(item, moved, move_end);
+                        }
+                        if (collided) {
+                            gobj.y -= y_int;
+                        }
+                    } else if (!gobj.check_solid(0, y_int)) {
+                        var collided = true;
+                        if (args.vert_bonk) |bonk| {
+                            collided = bonk(item, moved, move_end);
+                        }
+                        if (collided) {
+                            gobj.y += y_int;
+                        }
+                    }
+                }
+                // leave early : )
+                if (x_int == 0 or !gobj.check_solid(0, 0))
+                    break :chk_solid;
+                // the wall.
+                if (!gobj.check_solid(-x_int, 0) or !gobj.check_solid(x_int, 0)) {
+                    var collided = true;
+                    if (args.wall_bonk) |wall| {
+                        collided = wall(item, moved, move_end);
+                    }
+                    if (collided) {
+                        gobj.move_raw(moved.with_y(0).times(-1));
+                    }
+                }
+            }
+        }
     }
 };
 
@@ -231,6 +298,20 @@ pub fn on_collide_y(self: *GameObject, moved: i32, target: i32) bool {
     _ = target;
     self.remainder_y = 0;
     self.speed_y = 0;
+    return true;
+}
+
+pub fn vert_bonk(self: *GameObject, moved: types.PointF, target: types.PointF) bool {
+    _ = moved;
+    _ = target;
+    self.speed_y = 0;
+    return true;
+}
+
+pub fn wall_bonk(self: *GameObject, moved: types.PointF, target: types.PointF) bool {
+    _ = moved;
+    _ = target;
+    self.speed_x = 0;
     return true;
 }
 

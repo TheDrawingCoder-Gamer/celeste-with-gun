@@ -61,6 +61,13 @@ pub const PointF = struct {
         const angle = self.to_radians() - other.to_radians();
         return self.length() * other.length() * @cos(angle);
     }
+
+    pub fn with_x(self: PointF, x: f32) PointF {
+        return .{ .x = x, .y = self.y };
+    }
+    pub fn with_y(self: PointF, y: f32) PointF {
+        return .{ .x = self.x, .y = y };
+    }
 };
 
 pub fn approach(x: anytype, target: anytype, max_delta: anytype) @TypeOf(x, target, max_delta) {

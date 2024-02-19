@@ -113,7 +113,7 @@ fn shoot(self: *Player) void {
     };
     tic80.sfx(3, .{ .duration = 10, .volume = 5 });
 }
-fn raw_jump(self: *Player, play_sound: bool) void {
+fn raw_jump(self: *Player, play_sound: bool) bool {
     _ = self.input.consume_jump_press();
     self.state = .normal;
     self.game_object.speed_y = -4;
@@ -122,18 +122,21 @@ fn raw_jump(self: *Player, play_sound: bool) void {
     self.t_var_jump = 4;
     self.t_jump_grace = 0;
     self.auto_var_jump = false;
-    self.add_platform_velocity(play_sound);
+    const did_play = self.add_platform_velocity(play_sound);
     _ = vtable.move_y(self, @floatFromInt(self.jump_grace_y - self.game_object.y), null);
+    return did_play;
 }
 
 fn jump(self: *Player) void {
-    self.raw_jump(true);
-    self.voice.play(5, .{ .volume = 5 });
+    const did_play = self.raw_jump(true);
+    if (!did_play) {
+        self.voice.play(5, .{ .volume = 5 });
+    }
 }
 
 fn super_dash(self: *Player, recover: bool) void {
     self.game_object.speed_x = std.math.sign(self.game_object.speed_x) * 3;
-    self.raw_jump(false);
+    _ = self.raw_jump(false);
     self.can_dash = recover;
     self.reset_dash_info();
     self.voice.play(2, .{ .volume = 5 });
@@ -149,7 +152,7 @@ fn dash_jump(self: *Player, recover: bool) void {
     self.auto_var_jump = false;
     self.reset_dash_info();
     self.can_dash = recover;
-    self.add_platform_velocity(false);
+    _ = self.add_platform_velocity(false);
     self.voice.play(2, .{ .volume = 5 });
     _ = vtable.move_y(self, @floatFromInt(self.jump_grace_y - self.game_object.y), null);
 }
@@ -378,7 +381,7 @@ pub fn update(self: *Player) void {
 
     // apply
     const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
-    self.sweep_test_move(.{ .x = self.game_object.speed_x, .y = self.game_object.speed_y * gravity_multiplier }, true);
+    vtable.move(self, .{ .x = self.game_object.speed_x, .y = self.game_object.speed_y * gravity_multiplier }, move_args);
 
     // sprite
     if (self.state == .dash) {
@@ -548,6 +551,38 @@ pub fn on_collide_x(self: *Player, moved: i32, target: i32) bool {
     }
     return GameObject.on_collide_x(&self.game_object, moved, target);
 }
+
+const move_args: GameObject.VTable.MoveArgs = .{
+    .wall_bonk = @ptrCast(&wall_bonk),
+    .vert_bonk = @ptrCast(&vert_bonk),
+};
+fn vert_bonk(self: *Player, moved: types.PointF, target: types.PointF) bool {
+    if (target.y < 0 and self.corner_correct(0, -1, 2, .{ .only_sign = 1, .func = &correction_func })) {
+        return false;
+    }
+    if (self.state == .dash and self.corner_correct(0, @intFromFloat(std.math.sign(target.y)), 4, .{ .only_sign = 0, .func = &correction_func })) {
+        return false;
+    }
+
+    self.t_var_jump = 0;
+    return GameObject.vert_bonk(&self.game_object, moved, target);
+}
+fn wall_bonk(self: *Player, moved: types.PointF, target: types.PointF) bool {
+    switch (self.state) {
+        .normal => {
+            if (@as(i2, @intFromFloat(std.math.sign(target.x))) == self.input.input_x and self.corner_correct(0, 2, 2, .{ .only_sign = -1, .func = &correction_func })) {
+                return false;
+            }
+        },
+        .dash => {
+            if (self.corner_correct(0, 2, 2, .{ .only_sign = 0, .func = &correction_func })) {
+                return false;
+            }
+        },
+        else => {},
+    }
+    return GameObject.wall_bonk(&self.game_object, moved, target);
+}
 pub fn on_collide_y(self: *Player, moved: i32, target: i32) bool {
     if (target < 0 and self.corner_correct(0, -1, 2, .{ .only_sign = 1, .func = &correction_func })) {
         return false;
@@ -556,7 +591,6 @@ pub fn on_collide_y(self: *Player, moved: i32, target: i32) bool {
         return false;
     }
 
-    self.t_var_jump = 0;
     return GameObject.on_collide_y(&self.game_object, moved, target);
 }
 
@@ -636,7 +670,7 @@ fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) boo
     const self: *Player = @alignCast(@ptrCast(ctx));
 
     // TODO: jank
-    return self.game_object.overlaps(platform, 0, -1);
+    return self.game_object.overlaps(platform, 0, 1);
 }
 
 fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
@@ -652,11 +686,10 @@ fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
 }
 
 fn riding_platform_moved(ctx: *anyopaque, delta: types.PointF) void {
-    const self: *Player = @alignCast(@ptrCast(ctx));
-    self.sweep_test_move(delta, false);
+    vtable.move(ctx, delta, move_args);
 }
 
-fn add_platform_velocity(self: *Player, play_sound: bool) void {
+fn add_platform_velocity(self: *Player, play_sound: bool) bool {
     if (self.t_platform_velocity_storage > 0) {
         var add = self.platform_velocity;
         add.y = std.math.clamp(add.y, -30, 0);
@@ -667,107 +700,9 @@ fn add_platform_velocity(self: *Player, play_sound: bool) void {
         self.t_platform_velocity_storage = 0;
 
         if (play_sound and (add.y <= 3 or add.x > 3)) {
-            self.voice.play(6, .{ .volume = 8 });
+            self.game_object.game_state.voice.play(6, .{ .volume = 8 });
+            return true;
         }
-    }
-}
-
-fn sweep_test_move(self: *Player, delta: types.PointF, do_resolve_impact: bool) void {
-    var resolve_impact = do_resolve_impact;
-
-    if (delta.length_squared() <= 0)
-        return;
-
-    var remaining = delta.length();
-    // HACK: set a maximum step count
-    const step_size: f32 = @max(remaining / 32, 1.0);
-    const step_normal = delta.times(1 / remaining);
-
-    while (remaining > 0) {
-        const step = @min(remaining, step_size);
-        remaining -= step;
-        self.game_object.move_raw(step_normal.times(step));
-
-        if (self.popout(resolve_impact)) {
-            // don't repeatedly sniff walls
-            resolve_impact = false;
-        }
-    }
-}
-// returns true if you just got walled
-// send this to your friends to totally wall them!
-fn popout(self: *Player, resolve_impact: bool) bool {
-    var pushout: types.PointF = .{ .x = 0, .y = 0 };
-    if (self.ground_check(&pushout)) {
-        self.game_object.move_raw(pushout);
-        if (resolve_impact) {
-            self.game_object.speed_y = @min(self.game_object.speed_y, 0);
-        }
-    } else if (self.ceiling_check(&pushout)) {
-        self.game_object.move_raw(pushout);
-        if (resolve_impact) {
-            self.game_object.speed_y = @max(self.game_object.speed_y, 0);
-        }
-    }
-
-    if (self.wall_check()) |hit| {
-        self.game_object.move_raw(hit.pushout);
-
-        if (resolve_impact) {
-            const dot = @min(0, @cos(self.game_object.velocity().to_radians() - hit.angle));
-            self.game_object.set_velocity(types.PointF.from_radians(hit.angle).times(self.game_object.velocity().length() * dot));
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
-fn ground_check(self: *Player, pushout: *types.PointF) bool {
-    pushout.* = .{ .x = 0, .y = 0 };
-
-    const pos = self.game_object.point();
-    // YIPDEE!
-    if (self.game_object.game_state.raycast(pos.add(types.Point.as_float(.{ .x = self.game_object.hit_x + (self.game_object.hit_w / 2), .y = self.game_object.hit_y })), -std.math.pi / 2.0, @floatFromInt(self.game_object.hit_h))) |hit| {
-        tic80.trace("YIPDEE!");
-        // assumes that hit.angle == std.math.pi / 2.0, which is usually true
-        pushout.*.y = -hit.distance;
-        return true;
     }
     return false;
-}
-
-fn ceiling_check(self: *Player, pushout: *types.PointF) bool {
-    pushout.* = .{ .x = 0, .y = 0 };
-
-    const pos = self.game_object.point();
-
-    if (self.game_object.game_state.raycast(pos.add(types.Point.as_float(.{ .x = self.game_object.hit_x + (self.game_object.hit_w / 2), .y = self.game_object.hit_y + self.game_object.hit_h })), std.math.pi / 2.0, @floatFromInt(self.game_object.hit_h))) |hit| {
-        pushout.*.y = hit.distance;
-        return true;
-    }
-
-    return false;
-}
-
-const wall_check_distance = 4;
-const WallHit = struct {
-    pushout: types.PointF,
-    pos: types.PointF,
-    distance: f32,
-    angle: f32,
-};
-fn wall_check(self: *Player) ?WallHit {
-    const pos = self.game_object.point();
-
-    if (self.game_object.game_state.raycast(pos.add(types.Point.as_float(.{ .x = self.game_object.hit_x, .y = self.game_object.hit_y + self.game_object.hit_h / 2 })), 0, @floatFromInt(self.game_object.hit_w))) |hit| {
-        return .{ .pos = hit.pos, .pushout = .{ .x = -hit.distance, .y = 0 }, .distance = hit.distance, .angle = std.math.pi };
-    }
-
-    if (self.game_object.game_state.raycast(pos.add(types.Point.as_float(.{ .x = self.game_object.hit_x + self.game_object.hit_w, .y = self.game_object.hit_y + self.game_object.hit_h / 2 })), std.math.pi, @floatFromInt(self.game_object.hit_w))) |hit| {
-        return .{ .pos = hit.pos, .pushout = .{ .x = hit.distance, .y = 0 }, .distance = hit.distance, .angle = 0 };
-    }
-
-    return null;
 }

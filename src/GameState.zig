@@ -23,10 +23,12 @@ screenwipe: Screenwipe = .{},
 panning: bool = false,
 current_player_spawn: types.Point = .{ .x = 0, .y = 0 },
 voice: *Voice,
+// voice for extra effects
+aux_voice: *Voice,
 
-pub fn init(allocator: std.mem.Allocator, players: []const *Player, voice: *Voice) GameState {
+pub fn init(allocator: std.mem.Allocator, players: []const *Player, voice: *Voice, aux_voice: *Voice) GameState {
     const list: std.DoublyLinkedList(GameObject.IsGameObject) = .{};
-    return .{ .allocator = allocator, .objects = list, .players = players, .voice = voice };
+    return .{ .allocator = allocator, .objects = list, .players = players, .voice = voice, .aux_voice = aux_voice };
 }
 
 pub fn wrap_node(self: *GameState, table: GameObject.IsGameObject) !*ObjectList.Node {

@@ -69,6 +69,8 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, args: Doo
 pub fn activated(self: *SwitchDoor) void {
     self.active = true;
     self.t_progress = 0;
+    self.game_object.speed_x = @as(f32, @floatFromInt(self.target.x - self.start_x)) / 20.0;
+    self.game_object.speed_y = @as(f32, @floatFromInt(self.target.y - self.start_y)) / 20.0;
     // sfx...
 }
 
