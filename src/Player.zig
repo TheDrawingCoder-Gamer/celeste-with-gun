@@ -16,7 +16,12 @@ const types = @import("types.zig");
 const State = enum { normal, death, dash, grapple_start, grapple_attach, grapple_pull };
 const Mode = enum { none, dash, grapple };
 
-pub const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy) };
+pub const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .as_rider = &as_rider };
+const rider_vtable: GameObject.IRide.VTable = .{ .riding_platform_moved = &riding_platform_moved, .riding_platform_check = &riding_platform_check, .riding_platform_set_velocity = &riding_platform_set_velocity };
+
+fn as_rider(ctx: *anyopaque) GameObject.IRide {
+    return .{ .ctx = ctx, .table = &rider_vtable };
+}
 
 state: State = .normal,
 t_var_jump: u32 = 0,
@@ -42,6 +47,8 @@ crouching: bool = false,
 down_dash: bool = false,
 t_recharge: u8 = 0,
 recharging: bool = false,
+t_platform_velocity_storage: u8 = 0,
+platform_velocity: types.PointF = .{ .x = 0, .y = 0 },
 
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !Player {
     var obj = GameObject.create(state, x, y);
@@ -106,7 +113,7 @@ fn shoot(self: *Player) void {
     };
     tic80.sfx(3, .{ .duration = 10, .volume = 5 });
 }
-fn raw_jump(self: *Player) void {
+fn raw_jump(self: *Player, play_sound: bool) void {
     _ = self.input.consume_jump_press();
     self.state = .normal;
     self.game_object.speed_y = -4;
@@ -115,17 +122,18 @@ fn raw_jump(self: *Player) void {
     self.t_var_jump = 4;
     self.t_jump_grace = 0;
     self.auto_var_jump = false;
+    self.add_platform_velocity(play_sound);
     _ = vtable.move_y(self, @floatFromInt(self.jump_grace_y - self.game_object.y), null);
 }
 
 fn jump(self: *Player) void {
-    self.raw_jump();
+    self.raw_jump(true);
     self.voice.play(5, .{ .volume = 5 });
 }
 
 fn super_dash(self: *Player, recover: bool) void {
     self.game_object.speed_x = std.math.sign(self.game_object.speed_x) * 3;
-    self.raw_jump();
+    self.raw_jump(false);
     self.can_dash = recover;
     self.reset_dash_info();
     self.voice.play(2, .{ .volume = 5 });
@@ -141,6 +149,7 @@ fn dash_jump(self: *Player, recover: bool) void {
     self.auto_var_jump = false;
     self.reset_dash_info();
     self.can_dash = recover;
+    self.add_platform_velocity(false);
     self.voice.play(2, .{ .volume = 5 });
     _ = vtable.move_y(self, @floatFromInt(self.jump_grace_y - self.game_object.y), null);
 }
@@ -236,6 +245,8 @@ pub fn update(self: *Player) void {
         self.t_fire_pose -= 1;
     if (self.t_recharge > 0)
         self.t_recharge -= 1;
+    if (self.t_platform_velocity_storage > 0)
+        self.t_platform_velocity_storage -= 1;
     var sliding = false;
     switch (self.state) {
         .normal => {
@@ -367,8 +378,7 @@ pub fn update(self: *Player) void {
 
     // apply
     const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
-    _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
-    _ = vtable.move_y(self, self.game_object.speed_y * gravity_multiplier, @ptrCast(&on_collide_y));
+    self.sweep_test_move(.{ .x = self.game_object.speed_x, .y = self.game_object.speed_y * gravity_multiplier }, true);
 
     // sprite
     if (self.state == .dash) {
@@ -620,4 +630,144 @@ pub fn draw(self: *Player) void {
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
     _ = tic80.printf("{any}", .{self.game_object.speed_x}, 0, 0, .{});
+}
+
+fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) bool {
+    const self: *Player = @alignCast(@ptrCast(ctx));
+
+    // TODO: jank
+    return self.game_object.overlaps(platform, 0, -1);
+}
+
+fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
+    if (value.x == 0 and value.y == 0) return;
+
+    const self: *Player = @alignCast(@ptrCast(ctx));
+    if (self.t_platform_velocity_storage == 0 or value.y <= self.game_object.speed_y or types.abs(value.x) > types.abs(self.game_object.speed_x) or
+        (std.math.sign(value.x) != std.math.sign(self.game_object.speed_x)))
+    {
+        self.t_platform_velocity_storage = 10;
+        self.platform_velocity = value;
+    }
+}
+
+fn riding_platform_moved(ctx: *anyopaque, delta: types.PointF) void {
+    const self: *Player = @alignCast(@ptrCast(ctx));
+    self.sweep_test_move(delta, false);
+}
+
+fn add_platform_velocity(self: *Player, play_sound: bool) void {
+    if (self.t_platform_velocity_storage > 0) {
+        var add = self.platform_velocity;
+        add.y = std.math.clamp(add.y, -30, 0);
+        add.x = std.math.clamp(add.x, -50, 50);
+        self.game_object.speed_x += add.x;
+        self.game_object.speed_y += add.y;
+        self.platform_velocity = .{ .x = 0, .y = 0 };
+        self.t_platform_velocity_storage = 0;
+
+        if (play_sound and (add.y <= 3 or add.x > 3)) {
+            self.voice.play(6, .{ .volume = 8 });
+        }
+    }
+}
+
+fn sweep_test_move(self: *Player, delta: types.PointF, do_resolve_impact: bool) void {
+    var resolve_impact = do_resolve_impact;
+
+    if (delta.length_squared() <= 0)
+        return;
+
+    var remaining = delta.length();
+    // HACK: set a maximum step count
+    const step_size: f32 = @max(remaining / 32, 1.0);
+    const step_normal = delta.times(1 / remaining);
+
+    while (remaining > 0) {
+        const step = @min(remaining, step_size);
+        remaining -= step;
+        self.game_object.move_raw(step_normal.times(step));
+
+        if (self.popout(resolve_impact)) {
+            // don't repeatedly sniff walls
+            resolve_impact = false;
+        }
+    }
+}
+// returns true if you just got walled
+// send this to your friends to totally wall them!
+fn popout(self: *Player, resolve_impact: bool) bool {
+    var pushout: types.PointF = .{ .x = 0, .y = 0 };
+    if (self.ground_check(&pushout)) {
+        self.game_object.move_raw(pushout);
+        if (resolve_impact) {
+            self.game_object.speed_y = @min(self.game_object.speed_y, 0);
+        }
+    } else if (self.ceiling_check(&pushout)) {
+        self.game_object.move_raw(pushout);
+        if (resolve_impact) {
+            self.game_object.speed_y = @max(self.game_object.speed_y, 0);
+        }
+    }
+
+    if (self.wall_check()) |hit| {
+        self.game_object.move_raw(hit.pushout);
+
+        if (resolve_impact) {
+            const dot = @min(0, @cos(self.game_object.velocity().to_radians() - hit.angle));
+            self.game_object.set_velocity(types.PointF.from_radians(hit.angle).times(self.game_object.velocity().length() * dot));
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+fn ground_check(self: *Player, pushout: *types.PointF) bool {
+    pushout.* = .{ .x = 0, .y = 0 };
+
+    const pos = self.game_object.point();
+    // YIPDEE!
+    if (self.game_object.game_state.raycast(pos.add(types.Point.as_float(.{ .x = self.game_object.hit_x + (self.game_object.hit_w / 2), .y = self.game_object.hit_y })), -std.math.pi / 2.0, @floatFromInt(self.game_object.hit_h))) |hit| {
+        tic80.trace("YIPDEE!");
+        // assumes that hit.angle == std.math.pi / 2.0, which is usually true
+        pushout.*.y = -hit.distance;
+        return true;
+    }
+    return false;
+}
+
+fn ceiling_check(self: *Player, pushout: *types.PointF) bool {
+    pushout.* = .{ .x = 0, .y = 0 };
+
+    const pos = self.game_object.point();
+
+    if (self.game_object.game_state.raycast(pos.add(types.Point.as_float(.{ .x = self.game_object.hit_x + (self.game_object.hit_w / 2), .y = self.game_object.hit_y + self.game_object.hit_h })), std.math.pi / 2.0, @floatFromInt(self.game_object.hit_h))) |hit| {
+        pushout.*.y = hit.distance;
+        return true;
+    }
+
+    return false;
+}
+
+const wall_check_distance = 4;
+const WallHit = struct {
+    pushout: types.PointF,
+    pos: types.PointF,
+    distance: f32,
+    angle: f32,
+};
+fn wall_check(self: *Player) ?WallHit {
+    const pos = self.game_object.point();
+
+    if (self.game_object.game_state.raycast(pos.add(types.Point.as_float(.{ .x = self.game_object.hit_x, .y = self.game_object.hit_y + self.game_object.hit_h / 2 })), 0, @floatFromInt(self.game_object.hit_w))) |hit| {
+        return .{ .pos = hit.pos, .pushout = .{ .x = -hit.distance, .y = 0 }, .distance = hit.distance, .angle = std.math.pi };
+    }
+
+    if (self.game_object.game_state.raycast(pos.add(types.Point.as_float(.{ .x = self.game_object.hit_x + self.game_object.hit_w, .y = self.game_object.hit_y + self.game_object.hit_h / 2 })), std.math.pi, @floatFromInt(self.game_object.hit_w))) |hit| {
+        return .{ .pos = hit.pos, .pushout = .{ .x = hit.distance, .y = 0 }, .distance = hit.distance, .angle = 0 };
+    }
+
+    return null;
 }

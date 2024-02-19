@@ -7,6 +7,7 @@ const tic = @import("tic80.zig");
 const Allocator = std.mem.Allocator;
 const types = @import("types.zig");
 const tdraw = @import("draw.zig");
+const Solid = @import("Solid.zig");
 
 const table: GameObject.VTable = .{
     .get_object = &get_object,
@@ -76,8 +77,9 @@ fn update(ctx: *anyopaque) void {
     if (self.active and self.t_progress < 20) {
         self.t_progress += 1;
         const progress: f32 = @as(f32, @floatFromInt(self.t_progress)) / 20;
-        self.game_object.x = @intFromFloat(types.lerp(@floatFromInt(self.start_x), @floatFromInt(self.target.x), progress));
-        self.game_object.y = @intFromFloat(types.lerp(@floatFromInt(self.start_y), @floatFromInt(self.target.y), progress));
+        const x: i32 = @intFromFloat(types.lerp(@floatFromInt(self.start_x), @floatFromInt(self.target.x), progress));
+        const y: i32 = @intFromFloat(types.lerp(@floatFromInt(self.start_y), @floatFromInt(self.target.y), progress));
+        Solid.move_to(.{ .ptr = self, .table = table }, x, y);
     }
 }
 fn draw(ctx: *anyopaque) void {

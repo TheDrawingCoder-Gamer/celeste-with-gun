@@ -41,6 +41,12 @@ pub const IsGameObject = struct {
     pub fn shot(self: *const IsGameObject) void {
         self.table.shot(self.ptr);
     }
+    pub fn as_rider(self: *const IsGameObject) ?IRide {
+        if (self.table.as_rider) |ride_it| {
+            return ride_it(self.ptr);
+        }
+        return null;
+    }
 };
 pub const VTable = struct {
     get_object: *const fn (self: *anyopaque) *GameObject,
@@ -51,6 +57,7 @@ pub const VTable = struct {
     touch: *const fn (self: *anyopaque, player: *Player) void = &GameObject.noTouch,
     can_touch: *const fn (self: *anyopaque, player: *Player) bool = &GameObject.noCanTouch,
     shot: *const fn (self: *anyopaque) void = &noShot,
+    as_rider: ?*const fn (self: *anyopaque) IRide = null,
     pub fn move_x(self: *const VTable, item: *anyopaque, x: f32, on_collide: ?*const fn (*anyopaque, moved: i32, target: i32) bool) bool {
         var gobj = self.get_object(item);
         gobj.remainder_x += x;
@@ -94,6 +101,28 @@ pub const VTable = struct {
         }
 
         return false;
+    }
+};
+
+// me too buddy, me too....
+pub const IRide = struct {
+    pub const VTable = struct {
+        riding_platform_set_velocity: *const fn (self: *anyopaque, value: types.PointF) void,
+        riding_platform_moved: *const fn (self: *anyopaque, delta: types.PointF) void,
+        riding_platform_check: *const fn (self: *anyopaque, platform: IsGameObject) bool,
+    };
+
+    ctx: *anyopaque,
+    table: *const IRide.VTable,
+
+    pub fn riding_platform_set_velocity(self: *const IRide, value: types.PointF) void {
+        self.table.riding_platform_set_velocity(self.ctx, value);
+    }
+    pub fn riding_platform_moved(self: *const IRide, delta: types.PointF) void {
+        self.table.riding_platform_moved(self.ctx, delta);
+    }
+    pub fn riding_platform_check(self: *const IRide, platform: IsGameObject) bool {
+        return self.table.riding_platform_check(self.ctx, platform);
     }
 };
 
@@ -205,8 +234,32 @@ pub fn on_collide_y(self: *GameObject, moved: i32, target: i32) bool {
     return true;
 }
 
+pub fn move_raw(self: *GameObject, by: types.PointF) void {
+    self.remainder_x += by.x;
+    const mx: i32 = @intFromFloat(std.math.floor(self.remainder_x + 0.5));
+    self.remainder_x -= @floatFromInt(mx);
+    self.x += mx;
+
+    self.remainder_y += by.y;
+    const my: i32 = @intFromFloat(std.math.floor(self.remainder_y + 0.5));
+    self.remainder_y -= @floatFromInt(my);
+    self.y += my;
+}
 pub fn create(state: *GameState, x: i32, y: i32) GameObject {
     return .{ .game_state = state, .x = x, .y = y, .id = @divFloor(x, 8) + @divFloor(y, 8) * 128 };
+}
+
+pub fn point(self: *const GameObject) types.PointF {
+    return .{ .x = @as(f32, @floatFromInt(self.x)) + self.remainder_x, .y = @as(f32, @floatFromInt(self.y)) + self.remainder_y };
+}
+
+pub fn velocity(self: *const GameObject) types.PointF {
+    return .{ .x = self.speed_x, .y = self.speed_y };
+}
+
+pub fn set_velocity(self: *GameObject, da_velocity: types.PointF) void {
+    self.speed_x += da_velocity.x;
+    self.speed_y += da_velocity.y;
 }
 
 fn identity(self: *GameObject) *GameObject {

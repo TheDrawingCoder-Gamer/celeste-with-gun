@@ -42,9 +42,11 @@ pub fn draw_spr(self: *GameState, id: i32, world_x: i32, world_y: i32, args: tic
 pub fn clean(self: *GameState) void {
     var it = self.objects.first;
     while (it) |node| : (it = node.next) {
-        self.objects.remove(node);
-        node.data.destroy(self.allocator);
-        self.allocator.destroy(node);
+        if (!node.data.obj().persistent) {
+            self.objects.remove(node);
+            node.data.destroy(self.allocator);
+            self.allocator.destroy(node);
+        }
     }
     self.screenwipe.reset();
 }
@@ -82,6 +84,18 @@ pub fn center_y(self: *GameState, on: i32) void {
         self.camera_y = @min(on - half_height, (self.loaded_level.y + self.loaded_level.height) * 8 - tic.HEIGHT);
     } else {
         self.camera_y = @max(on - half_height, self.loaded_level.y * 8);
+    }
+}
+
+pub fn forall_objects(self: *GameState, data: *anyopaque, func: *const fn (*anyopaque, GameObject.IsGameObject) void) void {
+    {
+        var it = self.objects.first;
+        while (it) |node| : (it = node.next) {
+            func(data, node.data);
+        }
+    }
+    for (self.players) |player| {
+        func(data, .{ .ptr = @ptrCast(player), .table = Player.vtable });
     }
 }
 pub fn loop(self: *GameState) void {
@@ -155,4 +169,83 @@ pub fn loop(self: *GameState) void {
             self.center_y(host.game_object.y);
         },
     }
+}
+const RaycastInfo = struct {
+    box: types.Box,
+    closest: *?f32,
+    point: *types.PointF,
+    ray_segment: types.LineSegment,
+};
+fn raycast_foreach(info: *anyopaque, obj: GameObject.IsGameObject) void {
+    const o = obj.obj();
+    if (!o.solid) return;
+    const data: *RaycastInfo = @alignCast(@ptrCast(info));
+
+    if (!o.overlaps_box(0, 0, data.box))
+        return;
+
+    for (o.world_hitbox().segments()) |segment| {
+        if (data.ray_segment.intersects(segment)) |int_point| {
+            const d = data.ray_segment.start.distance_squared(int_point);
+            if (data.closest.*) |c| {
+                if (c > d) {
+                    data.closest.* = d;
+                    data.point.* = int_point;
+                }
+            } else {
+                data.closest.* = d;
+                data.point.* = int_point;
+            }
+        }
+    }
+}
+pub const RayHit = struct { pos: types.PointF, distance: f32, angle: f32 };
+pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32) ?RayHit {
+    const p0 = start;
+    const direction = types.PointF.from_radians(angle);
+    const p1 = start.add(direction.times(distance));
+    const ray_segment: types.LineSegment = .{ .start = p0, .end = p1 };
+    const box = types.Box.aabb(@intFromFloat(p0.x), @intFromFloat(p0.y), @intFromFloat(p1.x), @intFromFloat(p1.y)).inflate(1);
+
+    var closest: ?f32 = null;
+    var point: types.PointF = start;
+
+    {
+        var i: i32 = @divFloor(box.x, 8);
+        const imax: i32 = @divFloor(box.x + box.w, 8);
+        const jmin = @divFloor(box.y, 8);
+        const jmax = @divFloor(box.y + box.h, 8);
+
+        while (i < imax) : (i += 1) {
+            var j = jmin;
+            while (j < jmax) : (j += 1) {
+                if (tic.fget(tic.mget(i, j), 0)) {
+                    const segments = [_]types.LineSegment{ .{ .start = types.Point.as_float(.{ .x = i * 8, .y = j * 8 }), .end = types.Point.as_float(.{ .x = (i + 1) * 8, .y = j * 8 }) }, .{ .start = types.Point.as_float(.{ .x = i * 8, .y = j * 8 }), .end = types.Point.as_float(.{ .x = i * 8, .y = (j + 1) * 8 }) }, .{ .start = types.Point.as_float(.{ .x = (i + 1) * 8, .y = j * 8 }), .end = types.Point.as_float(.{ .x = (i + 1) * 8, .y = (j + 1) * 8 }) }, .{ .start = types.Point.as_float(.{ .x = i * 8, .y = (j + 1) * 8 }), .end = types.Point.as_float(.{ .x = (i + 1) * 8, .y = (j + 1) * 8 }) } };
+                    for (segments) |segment| {
+                        if (ray_segment.intersects(segment)) |int_point| {
+                            const d = start.distance_squared(int_point);
+                            if (closest) |c| {
+                                if (c > d) {
+                                    closest = d;
+                                    point = int_point;
+                                }
+                            } else {
+                                closest = d;
+                                point = int_point;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    var info: RaycastInfo = .{ .closest = &closest, .box = box, .ray_segment = ray_segment, .point = &point };
+
+    self.forall_objects(@ptrCast(&info), &raycast_foreach);
+
+    if (closest) |c| {
+        return .{ .pos = point, .distance = std.math.sqrt(c), .angle = std.math.pi + angle };
+    }
+    return null;
 }
