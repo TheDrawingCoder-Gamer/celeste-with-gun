@@ -1,3 +1,5 @@
+const types = @This();
+
 const std = @import("std");
 
 pub const Point = struct {
@@ -18,6 +20,9 @@ pub const PointF = struct {
     y: f32 = 0,
     pub fn add(self: PointF, other: PointF) PointF {
         return .{ .x = self.x + other.x, .y = self.y + other.y };
+    }
+    pub fn minus(self: PointF, other: PointF) PointF {
+        return .{ .x = self.x - other.x, .y = self.y - other.y };
     }
     pub fn times(self: PointF, scalar: f32) PointF {
         return .{ .x = self.x * scalar, .y = self.y * scalar };
@@ -68,12 +73,23 @@ pub const PointF = struct {
     pub fn with_y(self: PointF, y: f32) PointF {
         return .{ .x = self.x, .y = y };
     }
+
+    pub fn approach(self: PointF, speed_x: f32, speed_y: f32, target: PointF) PointF {
+        return .{ .x = types.approach(self.x, target.x, speed_x), .y = types.approach(self.y, target.y, speed_y) };
+    }
+
+    pub fn lerp(left: PointF, right: PointF, t: f32) PointF {
+        return .{ .x = types.lerp(left.x, right.x, t), .y = types.lerp(left.y, right.y, t) };
+    }
 };
 
 pub fn approach(x: anytype, target: anytype, max_delta: anytype) @TypeOf(x, target, max_delta) {
     return if (x < target) @min(x + max_delta, target) else @max(x - max_delta, target);
 }
 
+pub fn sine_in_out(t: f32) f32 {
+    return -(std.math.cos(std.math.pi * t) - 1) / 2;
+}
 pub fn lerp(min: f32, max: f32, t: f32) f32 {
     return (1 - t) * min + t * max;
 }
@@ -130,14 +146,29 @@ pub const Box = struct {
     pub fn top_left(self: Box) Point {
         return .{ .x = self.x, .y = self.y };
     }
+    pub fn top_mid(self: Box) PointF {
+        return self.top_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2, .y = 0 });
+    }
     pub fn top_right(self: Box) Point {
         return .{ .x = self.x + self.w, .y = self.y };
     }
     pub fn bottom_left(self: Box) Point {
         return .{ .x = self.x, .y = self.y + self.h };
     }
+    pub fn bottom_mid(self: Box) PointF {
+        return self.bottom_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2, .y = 0 });
+    }
     pub fn bottom_right(self: Box) Point {
         return .{ .x = self.x + self.w, .y = self.y + self.h };
+    }
+    pub fn mid_left(self: Box) PointF {
+        return self.top_left().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h)) / 2 });
+    }
+    pub fn mid_right(self: Box) PointF {
+        return self.top_right().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h)) / 2 });
+    }
+    pub fn midpoint(self: Box) PointF {
+        return self.mid_left().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2 });
     }
 };
 

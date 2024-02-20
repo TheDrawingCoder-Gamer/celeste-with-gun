@@ -1,13 +1,20 @@
 const GameObject = @import("GameObject.zig");
 const std = @import("std");
 const tic = @import("tic80.zig");
+const PointF = @import("types.zig").PointF;
 
 pub fn move_to(self: GameObject.IsGameObject, x: i32, y: i32) void {
-    const obj = self.obj();
-    const delta_x: f32 = @floatFromInt(x - obj.x);
-    const delta_y: f32 = @floatFromInt(y - obj.y);
+    move_to_point(self, .{ .x = @floatFromInt(x), .y = @floatFromInt(y) });
+}
 
-    if (std.math.pow(f32, delta_x, 2) + std.math.pow(f32, delta_y, 2) > 0.001) {
+pub fn move_to_point(self: GameObject.IsGameObject, point: PointF) void {
+    move_to_point_with_speed(self, point, self.obj().velocity());
+}
+pub fn move_to_point_with_speed(self: GameObject.IsGameObject, point: PointF, speed: PointF) void {
+    const obj = self.obj();
+    const delta = point.add(obj.point().times(-1));
+
+    if (delta.length_squared() > 0.001) {
         {
             var it = obj.game_state.objects.first;
             while (it) |node| : (it = node.next) {
@@ -15,22 +22,39 @@ pub fn move_to(self: GameObject.IsGameObject, x: i32, y: i32) void {
                 if (actor.as_rider()) |rider| {
                     if (rider.riding_platform_check(self)) {
                         obj.solid = false;
-                        rider.riding_platform_set_velocity(.{ .x = obj.speed_x, .y = obj.speed_y });
-                        rider.riding_platform_moved(.{ .x = delta_x, .y = delta_y });
+                        rider.riding_platform_set_velocity(speed);
+                        rider.riding_platform_moved(delta);
                         obj.solid = true;
                     }
                 }
             }
         }
 
-        obj.remainder_x += delta_x;
-        const mx: i32 = @intFromFloat(@floor(obj.remainder_x + 0.5));
-        obj.remainder_x -= @floatFromInt(mx);
-        obj.x += mx;
+        obj.move_raw(delta);
+    }
+}
 
-        obj.remainder_y += delta_y;
-        const my: i32 = @intFromFloat(@floor(obj.remainder_y + 0.5));
-        obj.remainder_y -= @floatFromInt(my);
-        obj.y += my;
+pub fn move_to_point_once(self: GameObject.IsGameObject, point: PointF) void {
+    move_to_point_with_speed(self, point, point.add(self.obj().point().times(-1)));
+}
+pub fn move_by(self: GameObject.IsGameObject, delta: PointF) void {
+    const obj = self.obj();
+    if (delta.length_squared() > 0.001) {
+        {
+            var it = obj.game_state.objects.first;
+            while (it) |node| : (it = node.next) {
+                const actor = node.data;
+                if (actor.as_rider()) |rider| {
+                    if (rider.riding_platform_check(self)) {
+                        obj.solid = false;
+                        rider.riding_platform_set_velocity(delta);
+                        rider.riding_platform_moved(delta);
+                        obj.solid = true;
+                    }
+                }
+            }
+        }
+
+        obj.move_raw(delta);
     }
 }

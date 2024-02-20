@@ -11,6 +11,7 @@ const types = @import("types.zig");
 const Checkpoint = @import("Checkpoint.zig");
 const Switch = @import("Switch.zig");
 const SwitchDoor = @import("SwitchDoor.zig");
+const TrafficBlock = @import("TrafficBlock.zig");
 
 pub const CamMode = enum {
     locked,
@@ -32,8 +33,14 @@ pub const Entity = struct {
             h: u16,
             target: types.Point,
         };
+        const Traffic = struct {
+            w: u16,
+            h: u16,
+            target: types.Point,
+        };
         switch_block: SwitchBlock,
         switch_door: Door,
+        traffic_block: Traffic,
     };
     x: i32,
     y: i32,
@@ -49,13 +56,13 @@ pub const Room = struct {
         return &state.loaded_level;
     }
 };
-const level3_entities = [_]Entity{.{ .x = 68 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 4, .h = 1, .target = .{ .x = 98 * 8, .y = 15 * 8 } } } }};
+const level3_entities = [_]Entity{ .{ .x = 68 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 4, .h = 1, .target = .{ .x = 98 * 8, .y = 15 * 8 } } } }, .{ .x = 110 * 8, .y = 15 * 8, .kind = .{ .traffic_block = .{ .w = 3, .h = 1, .target = .{ .x = 130 * 8, .y = 15 * 8 } } } } };
 pub const rooms = [_]Room{ .{ .box = .{ .x = 0, .y = 0, .w = 30, .h = 17 } }, .{ .box = .{
     .x = 30,
     .y = 0,
     .w = 30,
     .h = 17,
-} }, .{ .box = .{ .x = 60, .y = 0, .w = 60, .h = 17 }, .cam_mode = .follow_x, .entities = &level3_entities } };
+} }, .{ .box = .{ .x = 60, .y = 0, .w = 90, .h = 17 }, .cam_mode = .follow_x, .entities = &level3_entities } };
 height: i32,
 width: i32,
 x: i32,
@@ -166,6 +173,9 @@ pub fn init(self: *Level) !void {
                 },
                 .switch_door => |door| {
                     _ = try SwitchDoor.create(self.state.allocator, self.state, entity.x, entity.y, .{ .kind = door.kind, .w = door.w, .h = door.h, .target = door.target });
+                },
+                .traffic_block => |traffic| {
+                    _ = try TrafficBlock.create(self.state, entity.x, entity.y, traffic.w, traffic.h, traffic.target);
                 },
             }
         }

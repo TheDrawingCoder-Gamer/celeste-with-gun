@@ -239,10 +239,30 @@ pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32)
         }
     }
 
-    _ = self;
-    // var info: RaycastInfo = .{ .closest = &closest, .box = box, .ray_segment = ray_segment, .point = &point };
+    {
+        var it = self.objects.first;
+        while (it) |node| : (it = node.next) {
+            const obj = node.data;
+            const o = obj.obj();
+            if (!o.solid) continue;
+            if (!o.overlaps_box(0, 0, box)) continue;
 
-    // self.forall_objects(@ptrCast(&info), &raycast_foreach);
+            for (o.world_hitbox().segments()) |segment| {
+                if (ray_segment.intersects(segment)) |int_point| {
+                    const d = ray_segment.start.distance_squared(int_point);
+                    if (closest) |c| {
+                        if (c > d) {
+                            closest = d;
+                            point = int_point;
+                        }
+                    } else {
+                        closest = d;
+                        point = int_point;
+                    }
+                }
+            }
+        }
+    }
 
     if (closest) |c| {
         return .{ .pos = point, .distance = std.math.sqrt(c), .angle = std.math.pi + angle };

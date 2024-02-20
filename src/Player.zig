@@ -389,6 +389,7 @@ pub fn update(self: *Player) void {
     // apply
     const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
     vtable.move(self, .{ .x = self.game_object.speed_x, .y = self.game_object.speed_y * gravity_multiplier }, move_args);
+    vtable.idle_popout(self);
 
     // sprite
     if (self.state == .dash) {
@@ -564,7 +565,7 @@ const move_args: GameObject.VTable.MoveArgs = .{
     .vert_bonk = @ptrCast(&vert_bonk),
 };
 fn vert_bonk(self: *Player, moved: types.PointF, target: types.PointF) bool {
-    if (target.y < 0 and self.corner_correct(0, -1, 2, .{ .only_sign = 1, .func = &correction_func })) {
+    if (target.y < 0 and self.corner_correct(0, -1, 4, .{ .only_sign = 0, .func = &correction_func })) {
         return false;
     }
     if (self.state == .dash and self.corner_correct(0, @intFromFloat(std.math.sign(target.y)), 4, .{ .only_sign = 0, .func = &correction_func })) {
@@ -670,24 +671,26 @@ pub fn draw(self: *Player) void {
     const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
-    _ = tic80.printf("{any}", .{self.game_object.speed_x}, 0, 0, .{});
+    _ = tic80.printf("{d}", .{self.game_object.speed_x}, 0, 0, .{});
+    _ = tic80.printf("{d}", .{self.t_platform_velocity_storage}, 0, 20, .{});
 }
 
 fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) bool {
     const self: *Player = @alignCast(@ptrCast(ctx));
+    const obj = platform.obj();
 
     // TODO: jank
-    return self.game_object.overlaps(platform, 0, 1);
+    return self.game_object.overlaps(platform, 0, 1) and (self.game_object.y + self.game_object.hit_y + self.game_object.hit_h) <= obj.y;
 }
 
 fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
     if (value.x == 0 and value.y == 0) return;
 
     const self: *Player = @alignCast(@ptrCast(ctx));
-    if (self.t_platform_velocity_storage == 0 or value.y <= self.game_object.speed_y or types.abs(value.x) > types.abs(self.game_object.speed_x) or
-        (std.math.sign(value.x) != std.math.sign(self.game_object.speed_x)))
+    if (self.t_platform_velocity_storage == 0 or value.y <= self.platform_velocity.y or types.abs(value.x) > types.abs(self.platform_velocity.x) or
+        (std.math.sign(value.x) != std.math.sign(self.platform_velocity.x)))
     {
-        self.t_platform_velocity_storage = 10;
+        self.t_platform_velocity_storage = 5;
         self.platform_velocity = value;
     }
 }

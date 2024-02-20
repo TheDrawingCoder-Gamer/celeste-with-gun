@@ -105,6 +105,30 @@ pub const VTable = struct {
 
         return false;
     }
+    pub fn idle_popout(self: *const VTable, item: *anyopaque) void {
+        var gobj = self.get_object(item);
+
+        if (gobj.check_solid(0, 0)) {
+            const hitbox = gobj.world_hitbox();
+            const ceil_check_point = hitbox.bottom_mid();
+
+            if (gobj.game_state.raycast(ceil_check_point, std.math.pi, @floatFromInt(gobj.hit_h))) |ray_hit| {
+                const pushout = ray_hit.pos.minus(gobj.point());
+                gobj.move_raw(pushout);
+            } else if (gobj.game_state.raycast(hitbox.top_mid(), -std.math.pi, @floatFromInt(gobj.hit_h))) |ray_hit| {
+                const pushout = ray_hit.pos.minus(gobj.point());
+                gobj.move_raw(pushout);
+            }
+
+            if (gobj.game_state.raycast(hitbox.mid_right(), std.math.pi, @floatFromInt(gobj.hit_w))) |ray_hit| {
+                const pushout = ray_hit.pos.minus(gobj.point());
+                gobj.move_raw(pushout);
+            } else if (gobj.game_state.raycast(hitbox.mid_left(), 0, @floatFromInt(gobj.hit_w))) |ray_hit| {
+                const pushout = ray_hit.pos.minus(gobj.point());
+                gobj.move_raw(pushout);
+            }
+        }
+    }
     pub const MoveArgs = struct {
         vert_bonk: ?*const fn (*anyopaque, moved: types.PointF, target: types.PointF) bool = null,
         wall_bonk: ?*const fn (*anyopaque, moved: types.PointF, target: types.PointF) bool = null,
@@ -336,8 +360,8 @@ pub fn velocity(self: *const GameObject) types.PointF {
 }
 
 pub fn set_velocity(self: *GameObject, da_velocity: types.PointF) void {
-    self.speed_x += da_velocity.x;
-    self.speed_y += da_velocity.y;
+    self.speed_x = da_velocity.x;
+    self.speed_y = da_velocity.y;
 }
 
 fn identity(self: *GameObject) *GameObject {
