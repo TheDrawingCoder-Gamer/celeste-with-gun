@@ -137,11 +137,19 @@ pub const Box = struct {
 
     pub fn segments(self: Box) [4]LineSegment {
         return .{
-            .{ .start = Point.as_float(.{ .x = self.x, .y = self.y }), .end = Point.as_float(.{ .x = self.x + self.w, .y = self.y }) },
-            .{ .start = Point.as_float(.{ .x = self.x, .y = self.y }), .end = Point.as_float(.{ .x = self.x, .y = self.y + self.h }) },
-            .{ .start = Point.as_float(.{ .x = self.x + self.w, .y = self.y }), .end = Point.as_float(.{ .x = self.x + self.w, .y = self.y + self.h }) },
-            .{ .start = Point.as_float(.{ .x = self.x, .y = self.y + self.h }), .end = Point.as_float(.{ .x = self.x + self.w, .y = self.y + self.h }) },
+            .{ .start = self.top_right().as_float(), .end = self.bottom_right().as_float() },
+            .{ .start = self.top_left().as_float(), .end = self.top_right().as_float() },
+            .{ .start = self.bottom_left().as_float(), .end = self.top_left().as_float() },
+            .{ .start = self.bottom_right().as_float(), .end = self.bottom_left().as_float() },
         };
+    }
+    pub fn angled_lines(self: Box) [4]AngledLine {
+        var lines: [4]AngledLine = undefined;
+        for (self.segments(), 0..) |segment, i| {
+            lines[i].line = segment;
+            lines[i].angle = @as(f32, @floatFromInt(i)) * (std.math.pi / 2.0);
+        }
+        return lines;
     }
     pub fn top_left(self: Box) Point {
         return .{ .x = self.x, .y = self.y };
@@ -210,6 +218,14 @@ pub const LineSegment = struct {
 
         return null;
     }
+    pub fn angle(self: LineSegment) f32 {
+        self.end.minus(self.start).to_radians();
+    }
+};
+
+pub const AngledLine = struct {
+    line: LineSegment,
+    angle: f32,
 };
 
 pub const Ray = struct { start: Point, angle: f32 };

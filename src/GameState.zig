@@ -169,35 +169,7 @@ pub fn loop(self: *GameState) void {
         self.reset_scheduled = false;
     }
 }
-const RaycastInfo = struct {
-    box: types.Box,
-    closest: *?f32,
-    point: *types.PointF,
-    ray_segment: types.LineSegment,
-};
-fn raycast_foreach(info: *anyopaque, obj: GameObject.IsGameObject) void {
-    const o = obj.obj();
-    if (!o.solid) return;
-    const data: *RaycastInfo = @alignCast(@ptrCast(info));
 
-    if (!o.overlaps_box(0, 0, data.box))
-        return;
-
-    for (o.world_hitbox().segments()) |segment| {
-        if (data.ray_segment.intersects(segment)) |int_point| {
-            const d = data.ray_segment.start.distance_squared(int_point);
-            if (data.closest.*) |c| {
-                if (c > d) {
-                    data.closest.* = d;
-                    data.point.* = int_point;
-                }
-            } else {
-                data.closest.* = d;
-                data.point.* = int_point;
-            }
-        }
-    }
-}
 pub const RayHit = struct { pos: types.PointF, distance: f32, angle: f32 };
 pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32) ?RayHit {
     const p0 = start;
@@ -219,8 +191,12 @@ pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32)
             var j = jmin;
             while (j < jmax) : (j += 1) {
                 if (tic.fget(tic.mget(i, j), 0)) {
-                    const segments = [_]types.LineSegment{ .{ .start = types.Point.as_float(.{ .x = i * 8, .y = j * 8 }), .end = types.Point.as_float(.{ .x = (i + 1) * 8, .y = j * 8 }) }, .{ .start = types.Point.as_float(.{ .x = i * 8, .y = j * 8 }), .end = types.Point.as_float(.{ .x = i * 8, .y = (j + 1) * 8 }) }, .{ .start = types.Point.as_float(.{ .x = (i + 1) * 8, .y = j * 8 }), .end = types.Point.as_float(.{ .x = (i + 1) * 8, .y = (j + 1) * 8 }) }, .{ .start = types.Point.as_float(.{ .x = i * 8, .y = (j + 1) * 8 }), .end = types.Point.as_float(.{ .x = (i + 1) * 8, .y = (j + 1) * 8 }) } };
-                    for (segments) |segment| {
+                    const solid_box: types.Box = .{ .x = i * 8, .y = j * 8, .w = 8, .h = 8 };
+                    for (solid_box.angled_lines()) |line| {
+                        if (@cos(line.angle - angle) < 0.8) {
+                            continue;
+                        }
+                        const segment = line.line;
                         if (ray_segment.intersects(segment)) |int_point| {
                             const d = start.distance_squared(int_point);
                             if (closest) |c| {
@@ -247,7 +223,11 @@ pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32)
             if (!o.solid) continue;
             if (!o.overlaps_box(0, 0, box)) continue;
 
-            for (o.world_hitbox().segments()) |segment| {
+            for (o.world_hitbox().angled_lines()) |line| {
+                if (@cos(line.angle - angle) < 0.8) {
+                    continue;
+                }
+                const segment = line.line;
                 if (ray_segment.intersects(segment)) |int_point| {
                     const d = ray_segment.start.distance_squared(int_point);
                     if (closest) |c| {

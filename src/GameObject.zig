@@ -110,21 +110,24 @@ pub const VTable = struct {
 
         if (gobj.check_solid(0, 0)) {
             const hitbox = gobj.world_hitbox();
-            const ceil_check_point = hitbox.bottom_mid();
 
-            if (gobj.game_state.raycast(ceil_check_point, std.math.pi, @floatFromInt(gobj.hit_h))) |ray_hit| {
-                const pushout = ray_hit.pos.minus(gobj.point());
+            const ceil_root = hitbox.bottom_mid();
+            const floor_root = hitbox.top_mid();
+            if (gobj.game_state.raycast(ceil_root, std.math.pi / 2.0, @floatFromInt(gobj.hit_h))) |ray_hit| {
+                const pushout = ray_hit.pos.minus(ceil_root);
                 gobj.move_raw(pushout);
-            } else if (gobj.game_state.raycast(hitbox.top_mid(), -std.math.pi, @floatFromInt(gobj.hit_h))) |ray_hit| {
-                const pushout = ray_hit.pos.minus(gobj.point());
+            } else if (gobj.game_state.raycast(floor_root, -std.math.pi / 2.0, @floatFromInt(gobj.hit_h))) |ray_hit| {
+                const pushout = ray_hit.pos.minus(floor_root);
                 gobj.move_raw(pushout);
             }
 
-            if (gobj.game_state.raycast(hitbox.mid_right(), std.math.pi, @floatFromInt(gobj.hit_w))) |ray_hit| {
-                const pushout = ray_hit.pos.minus(gobj.point());
+            const left_root = hitbox.mid_right();
+            const right_root = hitbox.mid_left();
+            if (gobj.game_state.raycast(left_root, std.math.pi, @floatFromInt(gobj.hit_w))) |ray_hit| {
+                const pushout = ray_hit.pos.minus(left_root);
                 gobj.move_raw(pushout);
-            } else if (gobj.game_state.raycast(hitbox.mid_left(), 0, @floatFromInt(gobj.hit_w))) |ray_hit| {
-                const pushout = ray_hit.pos.minus(gobj.point());
+            } else if (gobj.game_state.raycast(right_root, 0, @floatFromInt(gobj.hit_w))) |ray_hit| {
+                const pushout = ray_hit.pos.minus(right_root);
                 gobj.move_raw(pushout);
             }
         }

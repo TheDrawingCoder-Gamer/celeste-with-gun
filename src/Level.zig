@@ -75,9 +75,16 @@ entities: ?[]const Entity = null,
 
 pub fn load(self: *Level) !void {
     self.state.clean(false);
+    if (self.state.objects.pop()) |p_node| {
+        self.state.allocator.destroy(p_node);
+    }
     try self.init();
     self.state.snap_cam(self.x * 8, self.y * 8);
     const player = self.state.player orelse return;
+    {
+        const node = try self.state.wrap_node(player.as_table());
+        self.state.objects.append(node);
+    }
     const player_x: i32 = @divFloor(player.game_object.x, 8);
     const player_y: i32 = @divFloor(player.game_object.y, 8);
     player_spawn: {

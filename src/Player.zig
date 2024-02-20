@@ -671,8 +671,6 @@ pub fn draw(self: *Player) void {
     const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
-    _ = tic80.printf("{d}", .{self.game_object.speed_x}, 0, 0, .{});
-    _ = tic80.printf("{d}", .{self.t_platform_velocity_storage}, 0, 20, .{});
 }
 
 fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) bool {
@@ -690,7 +688,7 @@ fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
     if (self.t_platform_velocity_storage == 0 or value.y <= self.platform_velocity.y or types.abs(value.x) > types.abs(self.platform_velocity.x) or
         (std.math.sign(value.x) != std.math.sign(self.platform_velocity.x)))
     {
-        self.t_platform_velocity_storage = 5;
+        self.t_platform_velocity_storage = 10;
         self.platform_velocity = value;
     }
 }
@@ -709,10 +707,14 @@ fn add_platform_velocity(self: *Player, play_sound: bool) bool {
         self.platform_velocity = .{ .x = 0, .y = 0 };
         self.t_platform_velocity_storage = 0;
 
-        if (play_sound and (add.y <= 3 or add.x > 3)) {
+        if (play_sound and (add.y <= -3 or types.abs(add.x) > 3)) {
             self.game_object.game_state.voice.play(6, .{ .volume = 8 });
             return true;
         }
     }
     return false;
+}
+
+pub fn as_table(self: *Player) GameObject.IsGameObject {
+    return .{ .ptr = self, .table = vtable };
 }
