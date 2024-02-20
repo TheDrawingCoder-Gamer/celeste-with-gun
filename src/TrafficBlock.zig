@@ -7,6 +7,7 @@ const GameState = @import("GameState.zig");
 const types = @import("types.zig");
 const std = @import("std");
 const Solid = @import("Solid.zig");
+const tdraw = @import("draw.zig");
 
 const vtable: GameObject.VTable = .{ .destroy = &destroy, .can_touch = &can_touch, .touch = &touch, .ptr_draw = &draw, .ptr_update = &update, .get_object = &get_object };
 
@@ -20,6 +21,7 @@ width: u31,
 height: u31,
 last_touched: u64 = 0,
 lerp: f32 = 0,
+gear_frame: f32 = 0,
 
 pub fn create(state: *GameState, x: i32, y: i32, w: u31, h: u31, target: types.Point) !*TrafficBlock {
     var obj = GameObject.create(state, x, y);
@@ -105,6 +107,7 @@ fn update(ctx: *anyopaque) void {
         .idle => {},
         .advancing => {
             self.lerp = types.approach(self.lerp, 1, 2.0 / 60.0);
+            self.gear_frame -= 0.8;
             if (self.lerp == 1.0) {
                 self.stall();
             }
@@ -112,7 +115,8 @@ fn update(ctx: *anyopaque) void {
             Solid.move_to_point_once(self.as_table(), res);
         },
         .retreating => {
-            self.lerp = types.approach(self.lerp, 0, 1.0 / 60.0);
+            self.lerp = types.approach(self.lerp, 0, 0.5 / 60.0);
+            self.gear_frame += 0.2;
             if (self.lerp == 0.0) {
                 self.stop();
             }
@@ -126,6 +130,7 @@ fn update(ctx: *anyopaque) void {
             }
         },
     }
+    self.gear_frame = @mod(self.gear_frame, 3);
 }
 
 fn draw(ctx: *anyopaque) void {
@@ -133,20 +138,58 @@ fn draw(ctx: *anyopaque) void {
 
     const x = self.game_object.x - self.game_object.game_state.camera_x;
     const y = self.game_object.y - self.game_object.game_state.camera_y;
-    tic.rect(x, y, self.width * 8, self.height * 8, 14);
-    tic.rectb(x, y, self.width * 8, self.height * 8, 13);
+    tic.rect(x, y, self.width * 8, self.height * 8, 8);
+    tdraw.set2bpp();
+    tic.clip(x, y, self.width * 8, self.height * 8);
+    defer tic.noclip();
+    {
+        const gear_frame: i32 = @intFromFloat(self.gear_frame);
+        const frame: i32 = gear_frame + 835;
 
-    var point = @divFloor(self.width, 2) * 2 * 8;
+        tic.PALETTE_MAP.color1 = 14;
+        tic.PALETTE_MAP.color2 = 0;
+        var i: i32 = 0;
+        while (i < self.width) : (i += 1) {
+            var j: i32 = 0;
+            while (j < self.height) : (j += 1) {
+                tic.spr(frame, x + i * 8, y + j * 8 + 2, .{ .transparent = &.{0} });
+            }
+        }
+    }
+    tic.rectb(x, y, self.width * 8, self.height * 8, 14);
+
+    tic.PALETTE_MAP.color1 = 14;
+    tic.PALETTE_MAP.color2 = 13;
+    tic.PALETTE_MAP.color3 = 15;
+    // corners
+    tic.spr(865, x, y, .{ .transparent = &.{0} });
+    tic.spr(865, x + (self.width - 1) * 8, y, .{ .transparent = &.{0}, .rotate = .by90 });
+    tic.spr(865, x + (self.width - 1) * 8, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by180 });
+    tic.spr(865, x, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by270 });
+
+    var point = x + @divFloor(self.width, 2) * 8;
     // if even
     if (self.width & 1 == 0) {
         point += 4;
     }
-    const spr: i32 = switch (self.state) {
-        .idle => 434,
-        .advancing => 436,
-        .retreating, .stalled => 435,
+    // linker into border
+    if (self.width > 2) {
+        tic.spr(864, point - 4, y, .{ .transparent = &.{0}, .flip = .horizontal });
+        tic.spr(864, point + 4, y, .{
+            .transparent = &.{0},
+        });
+    }
+
+    tdraw.reset_pallete();
+    tdraw.set4bpp();
+
+    defer tdraw.reset_pallete();
+    tic.PALETTE_MAP.color2 = switch (self.state) {
+        .idle => 2,
+        .advancing => 6,
+        .retreating, .stalled => 4,
     };
-    tic.spr(spr, x + point, y, .{ .transparent = &.{0} });
+    tic.spr(434, point, y, .{ .transparent = &.{0} });
 }
 
 fn get_object(ctx: *anyopaque) *GameObject {
