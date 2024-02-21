@@ -390,7 +390,7 @@ pub fn update(self: *Player) void {
     // apply
     const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
     vtable.move(self, .{ .x = self.game_object.speed_x, .y = self.game_object.speed_y * gravity_multiplier }, move_args);
-    vtable.idle_popout(self);
+    // vtable.idle_popout(self);
 
     // sprite
     if (self.state == .dash) {
