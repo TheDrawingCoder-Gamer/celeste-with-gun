@@ -400,6 +400,6 @@ pub fn yesCanTouch(ctx: *anyopaque, player: *Player) bool {
 pub const noDraw = noUpdate;
 pub const noShot = noUpdate;
 pub fn debug_draw_hitbox(self: *GameObject) void {
-    tic80.rectb(self.x + self.hit_x, self.y + self.hit_y, self.hit_w, self.hit_h, 1);
+    tic80.rectb(self.x + self.hit_x - self.game_state.camera_x, self.y + self.hit_y - self.game_state.camera_y, self.hit_w, self.hit_h, 1);
 }
 pub const vtable: VTable = .{ .get_object = @ptrCast(&identity), .ptr_update = &noUpdate, .ptr_draw = &noDraw, .destroy = &noDestroy };
