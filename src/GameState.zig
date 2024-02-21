@@ -97,6 +97,9 @@ pub fn center_y(self: *GameState, on: i32) void {
 
 pub fn loop(self: *GameState) void {
     tic.cls(13);
+    _ = tic.vbank(1);
+    tic.cls(0);
+    _ = tic.vbank(0);
     const should_update = self.screenwipe.infade > 45 and !self.panning and self.screenwipe.level_wipe > 45;
     // krill issue
 
@@ -174,30 +177,40 @@ pub const RayHit = struct { pos: types.PointF, distance: f32, angle: f32 };
 pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32) ?RayHit {
     const p0 = start;
     const direction = types.PointF.from_radians(angle);
-    const p1 = start.add(direction.times(distance));
+    const added = direction.times(distance);
+    const p1 = start.add(added);
     const ray_segment: types.LineSegment = .{ .start = p0, .end = p1 };
-    const box = types.Box.aabb(@intFromFloat(p0.x), @intFromFloat(p0.y), @intFromFloat(p1.x), @intFromFloat(p1.y)).inflate(1);
+    ray_segment.debug_draw(self.camera().as_float(), 4);
+    const box = types.Box.aabb(@intFromFloat(p0.x), @intFromFloat(p0.y), @intFromFloat(p1.x), @intFromFloat(p1.y)).inflate(2);
 
     var closest: ?f32 = null;
     var point: types.PointF = start;
 
     {
-        var i: i32 = @divFloor(box.x, 8);
-        const imax: i32 = @divFloor(box.x + box.w, 8);
-        const jmin = @divFloor(box.y, 8);
-        const jmax = @divFloor(box.y + box.h, 8);
+        const s = box.top_left();
+        const e = box.bottom_right();
+        var i: i32 = @divFloor(s.x, 8);
+        // I LOVE UB!
+        const imax: i32 = std.math.divCeil(i32, e.x, 8) catch unreachable;
+        const jmin = @divFloor(s.y, 8);
+        const jmax = std.math.divCeil(i32, e.y, 8) catch unreachable;
 
         while (i < imax) : (i += 1) {
             var j = jmin;
             while (j < jmax) : (j += 1) {
                 if (tic.fget(tic.mget(i, j), 0)) {
+                    // slightly inflate to prevent slipping in cracks
                     const solid_box: types.Box = .{ .x = i * 8, .y = j * 8, .w = 8, .h = 8 };
                     for (solid_box.angled_lines()) |line| {
-                        if (@cos(line.angle - angle) < 0.8) {
+                        if (types.angle_alignment(line.angle, angle) > -0.8) {
                             continue;
                         }
                         const segment = line.line;
+                        line.debug_draw(self.camera().as_float(), 1, 5);
                         if (ray_segment.intersects(segment)) |int_point| {
+                            _ = tic.vbank(1);
+                            tic.pix(@as(i32, @intFromFloat(int_point.x)) - self.camera_x, @as(i32, @intFromFloat(int_point.y)) - self.camera_y, 8);
+                            _ = tic.vbank(0);
                             const d = start.distance_squared(int_point);
                             if (closest) |c| {
                                 if (c > d) {
@@ -224,11 +237,15 @@ pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32)
             if (!o.overlaps_box(0, 0, box)) continue;
 
             for (o.world_hitbox().angled_lines()) |line| {
-                if (@cos(line.angle - angle) < 0.8) {
+                if (types.angle_alignment(line.angle, angle) > -0.8) {
                     continue;
                 }
                 const segment = line.line;
+                segment.debug_draw(self.camera().as_float(), 1);
                 if (ray_segment.intersects(segment)) |int_point| {
+                    _ = tic.vbank(1);
+                    tic.pix(@as(i32, @intFromFloat(int_point.x)) - self.camera_x, @as(i32, @intFromFloat(int_point.y)) - self.camera_y, 8);
+                    _ = tic.vbank(0);
                     const d = ray_segment.start.distance_squared(int_point);
                     if (closest) |c| {
                         if (c > d) {
@@ -245,7 +262,7 @@ pub fn raycast(self: *GameState, start: types.PointF, angle: f32, distance: f32)
     }
 
     if (closest) |c| {
-        return .{ .pos = point, .distance = std.math.sqrt(c), .angle = std.math.pi + angle };
+        return .{ .pos = point, .distance = std.math.sqrt(c), .angle = types.normalize_angle(std.math.pi + angle) };
     }
     return null;
 }

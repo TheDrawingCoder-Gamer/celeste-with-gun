@@ -119,11 +119,11 @@ pub const raw = struct {
     pub extern fn elli(x: i32, y: i32, a: i32, b: i32, color: i32) void;
     pub extern fn ellib(x: i32, y: i32, a: i32, b: i32, color: i32) void;
     pub extern fn fget(id: i32, flag: u8) bool;
-    pub extern fn font(text: [*:0]u8, x: u32, y: i32, trans_colors: ?[*]const u8, color_count: i32, char_width: i32, char_height: i32, fixed: bool, scale: i32, alt: bool) i32;
+    pub extern fn font(text: [*:0]const u8, x: u32, y: i32, trans_colors: ?[*]const u8, color_count: i32, char_width: i32, char_height: i32, fixed: bool, scale: i32, alt: bool) i32;
     pub extern fn fset(id: i32, flag: u8, value: bool) bool;
     pub extern fn key(keycode: i32) bool;
     pub extern fn keyp(keycode: i32, hold: i32, period: i32) bool;
-    pub extern fn line(x0: i32, y0: i32, x1: i32, y1: i32, color: i32) void;
+    pub extern fn line(x0: f32, y0: f32, x1: f32, y1: f32, color: i8) void;
     // pass struct by pointer SHOULD:tm JUST WORK
     pub extern fn map(x: i32, y: i32, w: i32, h: i32, sx: i32, sy: i32, trans_colors: ?[*]const u8, color_count: i32, scale: i32, remap: ?*const RemapArgs) void;
     pub extern fn memcpy(to: u32, from: u32, length: u32) void;
@@ -423,7 +423,7 @@ pub fn nosfx() void {
 // MEMORY
 
 pub fn pmemset(index: u32, value: u3) void {
-    raw.pmem(index, value);
+    _ = raw.pmem(index, value);
 }
 
 pub fn pmemget(index: u32) u32 {

@@ -56,8 +56,9 @@ pub const Room = struct {
         return &state.loaded_level;
     }
 };
-const level3_entities = [_]Entity{ .{ .x = 68 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 4, .h = 1, .target = .{ .x = 98 * 8, .y = 15 * 8 } } } }, .{ .x = 110 * 8, .y = 15 * 8, .kind = .{ .traffic_block = .{ .w = 3, .h = 1, .target = .{ .x = 130 * 8, .y = 15 * 8 } } } } };
-pub const rooms = [_]Room{ .{ .box = .{ .x = 0, .y = 0, .w = 30, .h = 17 } }, .{ .box = .{
+const level1_entities = [_]Entity{.{ .x = 3 * 8, .y = 6 * 8, .kind = .{ .traffic_block = .{ .w = 3, .h = 3, .target = .{ .x = 3 * 8, .y = 4 * 8 } } } }};
+const level3_entities = [_]Entity{ .{ .x = 68 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 4, .h = 1, .target = .{ .x = 98 * 8, .y = 15 * 8 } } } }, .{ .x = 110 * 8, .y = 13 * 8, .kind = .{ .traffic_block = .{ .w = 3, .h = 3, .target = .{ .x = 130 * 8, .y = 13 * 8 } } } } };
+pub const rooms = [_]Room{ .{ .box = .{ .x = 0, .y = 0, .w = 30, .h = 17 }, .entities = &level1_entities }, .{ .box = .{
     .x = 30,
     .y = 0,
     .w = 30,
@@ -152,9 +153,9 @@ pub fn init(self: *Level) !void {
 
                     _ = try Switch.create(self.state.allocator, self.state, x * 8, y * 8, .{ .is_gun = shootable, .is_touch = touching });
                 },
-                //20 => {
-                //    _ = try SwitchDoor.create(self.state.allocator, self.state, x * 8, y * 8, .{ .target = .{ .x = }});
-                //},
+                20 => {
+                    _ = try SwitchDoor.create(self.state.allocator, self.state, x * 8, y * 8, .{ .kind = 0, .w = 1, .h = 1, .target = .{ .x = 0, .y = 0 } });
+                },
                 51, 52, 53, 54 => |it| {
                     _ = try Spike.create(self.state.allocator, self.state, x * 8, y * 8, @enumFromInt(@as(u2, @intCast(it - 51))));
                 },

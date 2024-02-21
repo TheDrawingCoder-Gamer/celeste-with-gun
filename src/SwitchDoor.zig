@@ -97,4 +97,5 @@ fn draw(ctx: *anyopaque) void {
     defer tdraw.set4bpp();
     defer tdraw.reset_pallete();
     tic.spr(1540, x1 + (w / 2) - 3, y1 + (h / 2) - 3, .{ .transparent = &.{0} });
+    self.game_object.debug_draw_hitbox();
 }

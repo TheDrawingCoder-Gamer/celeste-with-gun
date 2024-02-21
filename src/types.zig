@@ -1,6 +1,7 @@
 const types = @This();
 
 const std = @import("std");
+const tic = @import("tic80.zig");
 
 pub const Point = struct {
     x: i32 = 0,
@@ -63,8 +64,7 @@ pub const PointF = struct {
     }
 
     pub fn dot(self: PointF, other: PointF) f32 {
-        const angle = self.to_radians() - other.to_radians();
-        return self.length() * other.length() * @cos(angle);
+        return (self.x * other.x) + (self.y * other.y);
     }
 
     pub fn with_x(self: PointF, x: f32) PointF {
@@ -80,6 +80,17 @@ pub const PointF = struct {
 
     pub fn lerp(left: PointF, right: PointF, t: f32) PointF {
         return .{ .x = types.lerp(left.x, right.x, t), .y = types.lerp(left.y, right.y, t) };
+    }
+
+    pub fn cross(self: PointF, other: PointF) f32 {
+        return (self.x * other.y) - (self.y * other.x);
+    }
+
+    pub fn trunc(self: PointF) PointF {
+        return .{ .x = @trunc(self.x), .y = @trunc(self.y) };
+    }
+    pub fn floor(self: PointF) PointF {
+        return .{ .x = @floor(self.x), .y = @floor(self.y) };
     }
 };
 
@@ -124,8 +135,8 @@ pub const Box = struct {
     pub fn aabb(x1: i32, y1: i32, x2: i32, y2: i32) Box {
         const minx = @min(x1, x2);
         const miny = @min(y1, y2);
-        const maxx = @max(x1, y1);
-        const maxy = @max(x1, y1);
+        const maxx = @max(x1, x2);
+        const maxy = @max(y1, y2);
         return aabb_unchecked(minx, miny, maxx, maxy);
     }
     pub fn aabb_unchecked(x1: i32, y1: i32, x2: i32, y2: i32) Box {
@@ -155,28 +166,28 @@ pub const Box = struct {
         return .{ .x = self.x, .y = self.y };
     }
     pub fn top_mid(self: Box) PointF {
-        return self.top_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2, .y = 0 });
+        return self.top_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w - 1)) / 2, .y = 0 });
     }
     pub fn top_right(self: Box) Point {
-        return .{ .x = self.x + self.w, .y = self.y };
+        return .{ .x = self.x + self.w - 1, .y = self.y };
     }
     pub fn bottom_left(self: Box) Point {
-        return .{ .x = self.x, .y = self.y + self.h };
+        return .{ .x = self.x, .y = self.y + self.h - 1 };
     }
     pub fn bottom_mid(self: Box) PointF {
-        return self.bottom_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2, .y = 0 });
+        return self.bottom_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w - 1)) / 2, .y = 0 });
     }
     pub fn bottom_right(self: Box) Point {
-        return .{ .x = self.x + self.w, .y = self.y + self.h };
+        return .{ .x = self.x + self.w - 1, .y = self.y + self.h - 1 };
     }
     pub fn mid_left(self: Box) PointF {
-        return self.top_left().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h)) / 2 });
+        return self.top_left().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h - 1)) / 2 });
     }
     pub fn mid_right(self: Box) PointF {
-        return self.top_right().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h)) / 2 });
+        return self.top_right().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h - 1)) / 2 });
     }
     pub fn midpoint(self: Box) PointF {
-        return self.mid_left().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2 });
+        return self.mid_left().add(.{ .x = @as(f32, @floatFromInt(self.w - 1)) / 2 });
     }
 };
 
@@ -185,35 +196,25 @@ pub const Direction = enum(u2) { up = 0, right = 1, down = 2, left = 3 };
 pub const LineSegment = struct {
     start: PointF,
     end: PointF,
-    pub fn intersects(self: LineSegment, other: LineSegment) ?PointF {
-        const p0_x = self.start.x;
-        const p0_y = self.start.y;
-        const p1_x = self.end.x;
-        const p1_y = self.end.y;
-        const p2_x = other.start.x;
-        const p2_y = other.start.y;
-        const p3_x = other.end.x;
-        const p3_y = other.end.y;
+    pub fn intersects(p_line: LineSegment, q_line: LineSegment) ?PointF {
+        const p = p_line.start;
+        const q = q_line.start;
+        const r = p_line.end.minus(p);
+        const s = q_line.end.minus(q);
 
-        const s1_x = p1_x - p0_x;
-        const s1_y = p1_y - p0_y;
-        const s2_x = p3_x - p2_x;
-        const s2_y = p3_y - p2_y;
+        const r_x_s = r.cross(s);
+        // either colinear or paralell. i don't really care LOL
+        if (abs(r_x_s) < 0.00001)
+            return null;
+        // Cross product is anticommutative
+        const qps = q.minus(p).cross(s);
+        const qpr = q.minus(p).cross(r);
 
-        const s_n = (-s1_x * (p0_x - p2_x) + s1_x * (p0_y - p2_y));
-        if (s_n == 0)
-            return null;
-        const s_d = (-s2_x * s1_y + s1_x * s2_y);
-        if (s_d == 0)
-            return null;
-        const s = s_n / s_d;
-        const t_n = (s2_x * (p0_x - p2_y) - s2_y * (p0_x - p2_x));
-        const t_d = (-s2_x * s1_y + s1_x * s2_y);
-        if (t_d == 0)
-            return null;
-        const t = t_n / t_d;
-        if (s >= 0 and s <= 1 and t >= 0 and t <= 1) {
-            return .{ .x = p0_x + (t * s1_x), .y = p0_y + (t * s1_y) };
+        const t = qps / r_x_s;
+        const u = qpr / r_x_s;
+
+        if (t >= 0 and t <= 1 and u >= 0 and u <= 1) {
+            return p.add(r.times(t));
         }
 
         return null;
@@ -221,11 +222,54 @@ pub const LineSegment = struct {
     pub fn angle(self: LineSegment) f32 {
         self.end.minus(self.start).to_radians();
     }
+    pub fn debug_draw(self: LineSegment, cam: types.PointF, color: u4) void {
+        // vbank to force overlay
+        _ = tic.vbank(1);
+        tic.line(self.start.x - cam.x, self.start.y - cam.y, self.end.x - cam.x, self.end.y - cam.y, color);
+        _ = tic.vbank(0);
+    }
 };
+
+test "line intersects" {
+    const segment_1: LineSegment = .{ .start = .{ .x = 0, .y = 0 }, .end = .{ .x = 0, .y = -1 } };
+    const segment_2: LineSegment = .{ .start = .{ .x = 1, .y = -0.5 }, .end = .{ .x = -1, .y = -0.5 } };
+    const res: ?PointF = .{ .x = 0, .y = -0.5 };
+    try std.testing.expectEqual(res, segment_1.intersects(segment_2));
+}
 
 pub const AngledLine = struct {
     line: LineSegment,
     angle: f32,
+    pub fn debug_draw(self: AngledLine, cam: types.PointF, color: u4, angle_color: u4) void {
+        self.line.debug_draw(cam, color);
+        const diff = self.line.end.minus(self.line.start);
+        const midpoint = self.line.start.add(diff.times(0.5));
+        const point = PointF.from_radians(self.angle);
+        _ = tic.vbank(1);
+        const sx = midpoint.x - cam.x;
+        const sy = midpoint.y - cam.y;
+        tic.line(sx, sy, sx + point.x * 4, sy + point.y * 4, angle_color);
+        _ = tic.vbank(0);
+    }
 };
 
 pub const Ray = struct { start: Point, angle: f32 };
+
+const tau = std.math.tau;
+const pi = std.math.pi;
+
+pub fn normalize_angle(theta: f32) f32 {
+    var angle = @mod(theta, tau);
+    if (angle > pi)
+        angle -= tau;
+    return angle;
+}
+
+pub fn angle_difference(left: f32, right: f32) f32 {
+    return normalize_angle(normalize_angle(left) - normalize_angle(right));
+}
+
+// how aligned two angles are. 1 is equavilant, -1 is literal opposites.
+pub fn angle_alignment(left: f32, right: f32) f32 {
+    return @cos(angle_difference(left, right));
+}

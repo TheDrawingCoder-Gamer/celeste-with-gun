@@ -49,6 +49,7 @@ t_recharge: u8 = 0,
 recharging: bool = false,
 t_platform_velocity_storage: u8 = 0,
 platform_velocity: types.PointF = .{ .x = 0, .y = 0 },
+fully_riding: bool = false,
 
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !*Player {
     var obj = GameObject.create(state, x, y);
@@ -677,8 +678,19 @@ fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) boo
     const self: *Player = @alignCast(@ptrCast(ctx));
     const obj = platform.obj();
 
+    if (obj.overlaps_box(0, 0, self.sniff_zone())) {
+        if (self.game_object.overlaps(platform, 0, 1)) {
+            self.fully_riding = true;
+            return true;
+        }
+        if (self.game_object.overlaps(platform, @intFromFloat(-std.math.sign(obj.speed_x)), @intFromFloat(-std.math.sign(obj.speed_y)))) {
+            self.fully_riding = false;
+            return true;
+        }
+    }
+
+    return false;
     // TODO: jank
-    return self.game_object.overlaps(platform, 0, 1) and (self.game_object.y + self.game_object.hit_y + self.game_object.hit_h) <= obj.y;
 }
 
 fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
@@ -694,6 +706,7 @@ fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
 }
 
 fn riding_platform_moved(ctx: *anyopaque, delta: types.PointF) void {
+    // const self: *Player = @alignCast(@ptrCast(ctx));
     vtable.move(ctx, delta, move_args);
 }
 

@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) !void {
 
     const buddy2_mod = b.addModule("buddy2", .{ .root_source_file = .{ .path = "vendor/zig-buddy2/src/buddy2.zig" } });
     const target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
+    const test_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const exe = b.addExecutable(.{
         .name = "cart",
         .root_source_file = .{ .path = "src/main.zig" },
@@ -27,4 +28,15 @@ pub fn build(b: *std.Build) !void {
     exe.global_base = 96 * 1024;
 
     b.installArtifact(exe);
+
+    const test_step = b.step("test", "Run build tests");
+    const tests = b.addTest(.{
+        .root_source_file = .{ .path = "src/main.zig" },
+        .target = test_target,
+        .name = "test",
+    });
+    tests.root_module.addImport("buddy2", buddy2_mod);
+
+    const run_tests = b.addRunArtifact(tests);
+    test_step.dependOn(&run_tests.step);
 }

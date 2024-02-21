@@ -130,12 +130,48 @@ fn update(ctx: *anyopaque) void {
             }
         },
     }
-    self.gear_frame = @mod(self.gear_frame, 3);
+    self.gear_frame = @mod(self.gear_frame, 4);
 }
 
+fn draw_chain(self: *TrafficBlock) void {
+    const cam = self.game_object.game_state.camera();
+    const start_x = self.start.x - cam.x;
+    const start_y = self.start.y - cam.y;
+    const end_x = self.target.x - cam.x;
+    const end_y = self.target.y - cam.y;
+
+    const line_color = 1;
+    tic.line(@floatFromInt(start_x + 4), @floatFromInt(start_y), @floatFromInt(end_x + 4), @floatFromInt(end_y), line_color);
+    tic.line(@floatFromInt(start_x + 4), @floatFromInt(start_y + 8), @floatFromInt(end_x + 4), @floatFromInt(end_y + 8), line_color);
+
+    tic.clip(start_x, start_y, 4, 8);
+    tic.circb(start_x + 4, start_y + 4, 4, line_color);
+    tic.clip(end_x + 4, end_y, 4, 8);
+    tic.circb(end_x + 4, end_y + 4, 4, line_color);
+
+    tic.noclip();
+
+    defer tdraw.set4bpp();
+    tdraw.set2bpp();
+    tic.PALETTE_MAP.color1 = 14;
+    tic.PALETTE_MAP.color2 = 15;
+
+    const gear_frame: i32 = @intFromFloat(self.gear_frame);
+    const frame = 962 + gear_frame;
+    tic.spr(frame, start_x, start_y, .{
+        .transparent = &.{0},
+    });
+
+    tic.spr(frame, end_x, end_y, .{
+        .transparent = &.{0},
+    });
+
+    tdraw.reset_pallete();
+}
 fn draw(ctx: *anyopaque) void {
     const self: *TrafficBlock = @alignCast(@ptrCast(ctx));
 
+    self.draw_chain();
     const x = self.game_object.x - self.game_object.game_state.camera_x;
     const y = self.game_object.y - self.game_object.game_state.camera_y;
     tic.rect(x, y, self.width * 8, self.height * 8, 8);
@@ -144,26 +180,37 @@ fn draw(ctx: *anyopaque) void {
     defer tic.noclip();
     {
         const gear_frame: i32 = @intFromFloat(self.gear_frame);
-        const frame: i32 = gear_frame + 835;
+        const clockwise_frame: i32 = gear_frame + 992;
+        const counter_frame: i32 = 995 - gear_frame;
 
-        tic.PALETTE_MAP.color1 = 14;
-        tic.PALETTE_MAP.color2 = 0;
+        tic.PALETTE_MAP.color1 = 13;
+        tic.PALETTE_MAP.color2 = 14;
+        tic.PALETTE_MAP.color3 = 0;
         var i: i32 = 0;
         while (i < self.width) : (i += 1) {
             var j: i32 = 0;
             while (j < self.height) : (j += 1) {
-                tic.spr(frame, x + i * 8, y + j * 8 + 2, .{ .transparent = &.{0} });
+                // xor
+                const counter_rotate = (i & 1) != (j & 1);
+                tic.spr(if (counter_rotate) counter_frame else clockwise_frame, x + i * 8, y + j * 8 + 2, .{ .transparent = &.{0} });
             }
         }
     }
-    tic.rectb(x, y, self.width * 8, self.height * 8, 14);
+    tic.rectb(x, y + 1, self.width * 8, (self.height * 8) - 1, 14);
+    tic.line(@floatFromInt(x), @floatFromInt(y), @floatFromInt(x + self.width * 8), @floatFromInt(y), 13);
+    tic.rectb(x + 1, y + 2, self.width * 8 - 1, self.height * 8 - 2, 15);
 
-    tic.PALETTE_MAP.color1 = 14;
-    tic.PALETTE_MAP.color2 = 13;
-    tic.PALETTE_MAP.color3 = 15;
     // corners
-    tic.spr(865, x, y, .{ .transparent = &.{0} });
-    tic.spr(865, x + (self.width - 1) * 8, y, .{ .transparent = &.{0}, .rotate = .by90 });
+    tdraw.set4bpp();
+    tdraw.reset_pallete();
+    tic.PALETTE_MAP.color1 = 0;
+    tic.spr(420, x, y, .{ .transparent = &.{0} });
+    tic.spr(420, x + (self.width - 1) * 8, y, .{ .transparent = &.{0}, .flip = .horizontal });
+
+    tdraw.set2bpp();
+    tic.PALETTE_MAP.color1 = 15;
+    tic.PALETTE_MAP.color2 = 14;
+    tic.PALETTE_MAP.color3 = 0;
     tic.spr(865, x + (self.width - 1) * 8, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by180 });
     tic.spr(865, x, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by270 });
 
@@ -171,13 +218,6 @@ fn draw(ctx: *anyopaque) void {
     // if even
     if (self.width & 1 == 0) {
         point += 4;
-    }
-    // linker into border
-    if (self.width > 2) {
-        tic.spr(864, point - 4, y, .{ .transparent = &.{0}, .flip = .horizontal });
-        tic.spr(864, point + 4, y, .{
-            .transparent = &.{0},
-        });
     }
 
     tdraw.reset_pallete();
@@ -189,7 +229,7 @@ fn draw(ctx: *anyopaque) void {
         .advancing => 6,
         .retreating, .stalled => 4,
     };
-    tic.spr(434, point, y, .{ .transparent = &.{0} });
+    tic.spr(434, point, y, .{ .transparent = &.{1} });
 }
 
 fn get_object(ctx: *anyopaque) *GameObject {

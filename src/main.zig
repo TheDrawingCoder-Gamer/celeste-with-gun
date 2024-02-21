@@ -22,7 +22,7 @@ export fn BOOT() void {
 
     input_1 = .{ .player = 0 };
     game_state = GameState.init(allocator, &input_1, &audio, &aux_audio);
-    Level.rooms[0].load_level(&game_state).start() catch unreachable;
+    Level.rooms[2].load_level(&game_state).start() catch unreachable;
     //for (Audio.music_patterns, 0..) |pattern, i| {
     //    tic.tracef("{d}, {any}", .{ i, pattern.get(0) });
     //}
