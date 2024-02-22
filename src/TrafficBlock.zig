@@ -86,14 +86,6 @@ fn start_retreat(self: *TrafficBlock) void {
     const velocity = self.target.add(self.start.times(-1)).as_float().normalized().times(-1);
     self.game_object.set_velocity(velocity);
 }
-fn approach(self: *TrafficBlock, speed: f32, target: types.PointF) bool {
-    const start_point = self.game_object.point();
-    const res = start_point.approach(speed, speed, target);
-    Solid.move_to_point_with_speed(self.as_table(), res, res.add(start_point.times(-1)));
-
-    return std.meta.eql(start_point, res);
-}
-
 fn as_table(self: *TrafficBlock) GameObject.IsGameObject {
     return .{ .ptr = self, .table = vtable };
 }
@@ -198,7 +190,7 @@ fn draw(ctx: *anyopaque) void {
     }
     tic.rectb(x, y + 1, self.width * 8, (self.height * 8) - 1, 14);
     tic.line(@floatFromInt(x), @floatFromInt(y), @floatFromInt(x + self.width * 8), @floatFromInt(y), 13);
-    tic.rectb(x + 1, y + 2, self.width * 8 - 1, self.height * 8 - 2, 15);
+    tic.rectb(x + 1, y + 2, self.width * 8 - 2, self.height * 8 - 3, 15);
 
     // corners
     tdraw.set4bpp();

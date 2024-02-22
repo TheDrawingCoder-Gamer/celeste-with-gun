@@ -17,12 +17,14 @@ const State = enum { normal, death, dash, grapple_start, grapple_attach, grapple
 const Mode = enum { none, dash, grapple };
 
 pub const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .as_rider = &as_rider };
-const rider_vtable: GameObject.IRide.VTable = .{ .riding_platform_moved = &riding_platform_moved, .riding_platform_check = &riding_platform_check, .riding_platform_set_velocity = &riding_platform_set_velocity };
+const rider_vtable: GameObject.IRide.VTable = .{ .riding_platform_check = &riding_platform_check, .riding_platform_set_velocity = &riding_platform_set_velocity };
 
 fn as_rider(ctx: *anyopaque) GameObject.IRide {
     return .{ .ctx = ctx, .table = &rider_vtable };
 }
 
+const MAX_FALL_SPEED = 2;
+const MAX_FAST_FALL_SPEED = 2.6;
 state: State = .normal,
 t_var_jump: u32 = 0,
 t_jump_grace: u8 = 0,
@@ -62,7 +64,7 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *I
     obj.hit_h = 6;
     obj.persistent = true;
     obj.special_type = .player;
-
+    obj.is_actor = true;
     const self = try allocator.create(Player);
 
     self.* = .{ .game_object = obj, .input = input, .allocator = allocator, .voice = voice };
@@ -290,22 +292,21 @@ pub fn update(self: *Player) void {
                 accel = 0.2;
             }
             self.game_object.speed_x = approach(self.game_object.speed_x, @as(f32, @floatFromInt(self.input.input_x)) * target, accel);
+            const fast_fall: f32 = if (self.input.input_y == 1) MAX_FAST_FALL_SPEED else MAX_FALL_SPEED;
+            if (self.input.input_x != 0) {
+                sliding = self.game_object.check_solid(self.input.input_x, 0);
+            }
+            const slide_penalty: f32 = if (sliding) 1 else 0;
+            const max_fall = fast_fall - slide_penalty;
 
+            if (std.math.sign(self.game_object.speed_y) * self.game_object.speed_y < 0.2 and self.input.input_jump) {
+                self.game_object.speed_y = @min(self.game_object.speed_y + 0.2, max_fall);
+            } else {
+                self.game_object.speed_y = @min(self.game_object.speed_y + 0.8, max_fall);
+            }
             if (!on_ground) {
                 self.recharging = false;
                 self.t_recharge = 0;
-                const fast_fall: f32 = if (self.input.input_y == 1) 2.6 else 2;
-                if (self.input.input_x != 0) {
-                    sliding = self.game_object.check_solid(self.input.input_x, 0);
-                }
-                const slide_penalty: f32 = if (sliding) 1 else 0;
-                const max = fast_fall - slide_penalty;
-
-                if (std.math.sign(self.game_object.speed_y) * self.game_object.speed_y < 0.2 and self.input.input_jump) {
-                    self.game_object.speed_y = @min(self.game_object.speed_y + 0.2, max);
-                } else {
-                    self.game_object.speed_y = @min(self.game_object.speed_y + 0.8, max);
-                }
             } else {
                 if (!self.can_dash and self.t_recharge == 0) {
                     if (self.recharging) {
@@ -389,8 +390,9 @@ pub fn update(self: *Player) void {
 
     // apply
     const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
-    vtable.move(self, .{ .x = self.game_object.speed_x, .y = self.game_object.speed_y * gravity_multiplier }, move_args);
-    // vtable.idle_popout(self);
+    // hack
+    _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
+    _ = vtable.move_y(self, self.game_object.speed_y * gravity_multiplier, @ptrCast(&on_collide_y));
 
     // sprite
     if (self.state == .dash) {
@@ -561,37 +563,6 @@ pub fn on_collide_x(self: *Player, moved: i32, target: i32) bool {
     return GameObject.on_collide_x(&self.game_object, moved, target);
 }
 
-const move_args: GameObject.VTable.MoveArgs = .{
-    .wall_bonk = @ptrCast(&wall_bonk),
-    .vert_bonk = @ptrCast(&vert_bonk),
-};
-fn vert_bonk(self: *Player, moved: types.PointF, target: types.PointF) bool {
-    if (target.y < 0 and self.corner_correct(0, -1, 4, .{ .only_sign = 0, .func = &correction_func })) {
-        return false;
-    }
-    if (self.state == .dash and self.corner_correct(0, @intFromFloat(std.math.sign(target.y)), 4, .{ .only_sign = 0, .func = &correction_func })) {
-        return false;
-    }
-
-    self.t_var_jump = 0;
-    return GameObject.vert_bonk(&self.game_object, moved, target);
-}
-fn wall_bonk(self: *Player, moved: types.PointF, target: types.PointF) bool {
-    switch (self.state) {
-        .normal => {
-            if (@as(i2, @intFromFloat(std.math.sign(target.x))) == self.input.input_x and self.corner_correct(0, 2, 2, .{ .only_sign = -1, .func = &correction_func })) {
-                return false;
-            }
-        },
-        .dash => {
-            if (self.corner_correct(0, 2, 2, .{ .only_sign = 0, .func = &correction_func })) {
-                return false;
-            }
-        },
-        else => {},
-    }
-    return GameObject.wall_bonk(&self.game_object, moved, target);
-}
 pub fn on_collide_y(self: *Player, moved: i32, target: i32) bool {
     if (target < 0 and self.corner_correct(0, -1, 2, .{ .only_sign = 1, .func = &correction_func })) {
         return false;
@@ -628,18 +599,6 @@ pub fn reset_pallete() void {
     tic80.PALETTE_MAP.color1 = 1;
     tic80.PALETTE_MAP.color2 = 2;
     tic80.PALETTE_MAP.color3 = 3;
-}
-pub fn reset(self: *Player) void {
-    self.state = .normal;
-    self.t_var_jump = 0;
-    self.t_fire_pose = 0;
-    self.auto_var_jump = false;
-    self.t_shoot_cooldown = 0;
-    self.t_jump_grace = 0;
-    self.jump_grace_y = 0;
-    self.t_dash_time = 0;
-    self.game_object.speed_x = 0;
-    self.game_object.speed_y = 0;
 }
 
 pub fn sniff_zone(self: *const Player) types.Box {
@@ -679,18 +638,16 @@ fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) boo
     const obj = platform.obj();
 
     if (obj.overlaps_box(0, 0, self.sniff_zone())) {
+        if (self.game_object.overlaps(platform, 0, 0)) {
+            return false;
+        }
         if (self.game_object.overlaps(platform, 0, 1)) {
             self.fully_riding = true;
-            return true;
-        }
-        if (self.game_object.overlaps(platform, @intFromFloat(-std.math.sign(obj.speed_x)), @intFromFloat(-std.math.sign(obj.speed_y)))) {
-            self.fully_riding = false;
             return true;
         }
     }
 
     return false;
-    // TODO: jank
 }
 
 fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
@@ -703,11 +660,6 @@ fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
         self.t_platform_velocity_storage = 10;
         self.platform_velocity = value;
     }
-}
-
-fn riding_platform_moved(ctx: *anyopaque, delta: types.PointF) void {
-    // const self: *Player = @alignCast(@ptrCast(ctx));
-    vtable.move(ctx, delta, move_args);
 }
 
 fn add_platform_velocity(self: *Player, play_sound: bool) bool {

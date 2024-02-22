@@ -16,6 +16,8 @@ pub const Point = struct {
         return .{ .x = @floatFromInt(self.x), .y = @floatFromInt(self.y) };
     }
 };
+
+pub const Vec2 = PointF;
 pub const PointF = struct {
     x: f32 = 0,
     y: f32 = 0,
@@ -92,6 +94,13 @@ pub const PointF = struct {
     pub fn floor(self: PointF) PointF {
         return .{ .x = @floor(self.x), .y = @floor(self.y) };
     }
+
+    pub fn element_divide(self: PointF, other: PointF) PointF {
+        return .{ .x = self.x / other.x, .y = self.y / other.y };
+    }
+    pub fn element_times(self: PointF, other: PointF) PointF {
+        return .{ .x = self.x * other.x, .y = self.y * other.y };
+    }
 };
 
 pub fn approach(x: anytype, target: anytype, max_delta: anytype) @TypeOf(x, target, max_delta) {
@@ -108,6 +117,33 @@ pub fn lerp(min: f32, max: f32, t: f32) f32 {
 pub fn abs(x: anytype) @TypeOf(x) {
     return x * std.math.sign(x);
 }
+
+// i learned what this means: axis aligned bounding box
+pub const AABB = struct {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    pub fn overlaps(a: AABB, b: AABB) bool {
+        return ((a.x < b.x + b.w and a.x + a.w > b.x) or (a.x + a.w > b.x and a.x < b.x + b.w)) and ((a.y < b.y + b.h and a.y + a.h > b.y) or (a.y + a.h > b.y and a.y < b.y + b.h));
+    }
+    pub fn top_left(self: AABB) Vec2 {
+        return .{ .x = self.x, .y = self.y };
+    }
+    pub fn aabb_cast(source: AABB, target: AABB, direction: Vec2, max_distance: f32) ?Ray.Hit {
+        const ray = Ray.create(.{ .x = source.x + source.w / 2.0, .y = source.y + source.h / 2.0 }, direction);
+        var good_target = target;
+        good_target.x -= source.w / 2;
+        good_target.y -= source.h / 2;
+        good_target.w += source.w;
+        good_target.h += source.h;
+        return ray.raycast(good_target, max_distance);
+    }
+
+    pub fn offset(self: AABB, by: Vec2) AABB {
+        return .{ .x = self.x + by.x, .y = self.y + by.y, .w = self.w, .h = self.h };
+    }
+};
 pub const Box = struct {
     x: i32,
     y: i32,
@@ -116,31 +152,24 @@ pub const Box = struct {
     pub fn overlapping(self: Box, other: Box) bool {
         const sx1 = self.x;
         const sy1 = self.y;
-        const sx2 = self.x + self.w;
-        const sy2 = self.y + self.h;
+        const sx2 = self.right();
+        const sy2 = self.bottom();
 
         const ox1 = other.x;
         const oy1 = other.y;
-        const ox2 = other.x + other.w;
-        const oy2 = other.y + other.h;
+        const ox2 = other.right();
+        const oy2 = other.bottom();
 
         return sx2 > ox1 and sy2 > oy1 and sx1 < ox2 and sy1 < oy2;
+    }
+    pub fn offset(self: Box, x: i32, y: i32) Box {
+        return .{ .x = x + self.x, .y = y + self.y, .w = self.w, .h = self.h };
     }
     pub fn contains(self: Box, x: i32, y: i32) bool {
         return x >= self.x and
             x < self.x + self.w and
             y >= self.y and
             y < self.y + self.h;
-    }
-    pub fn aabb(x1: i32, y1: i32, x2: i32, y2: i32) Box {
-        const minx = @min(x1, x2);
-        const miny = @min(y1, y2);
-        const maxx = @max(x1, x2);
-        const maxy = @max(y1, y2);
-        return aabb_unchecked(minx, miny, maxx, maxy);
-    }
-    pub fn aabb_unchecked(x1: i32, y1: i32, x2: i32, y2: i32) Box {
-        return .{ .x = x1, .y = y1, .w = x2 - x1, .h = y2 - y1 };
     }
     pub fn inflate(self: Box, n: i32) Box {
         return .{ .x = self.x - n, .y = self.y - n, .w = self.w + n, .h = self.h + n };
@@ -166,28 +195,35 @@ pub const Box = struct {
         return .{ .x = self.x, .y = self.y };
     }
     pub fn top_mid(self: Box) PointF {
-        return self.top_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w - 1)) / 2, .y = 0 });
+        return self.top_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2, .y = 0 });
     }
     pub fn top_right(self: Box) Point {
-        return .{ .x = self.x + self.w - 1, .y = self.y };
+        return .{ .x = self.right(), .y = self.y };
     }
     pub fn bottom_left(self: Box) Point {
-        return .{ .x = self.x, .y = self.y + self.h - 1 };
+        return .{ .x = self.x, .y = self.bottom() };
     }
     pub fn bottom_mid(self: Box) PointF {
-        return self.bottom_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w - 1)) / 2, .y = 0 });
+        return self.bottom_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2, .y = 0 });
     }
     pub fn bottom_right(self: Box) Point {
-        return .{ .x = self.x + self.w - 1, .y = self.y + self.h - 1 };
+        return .{ .x = self.right(), .y = self.bottom() };
     }
     pub fn mid_left(self: Box) PointF {
-        return self.top_left().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h - 1)) / 2 });
+        return self.top_left().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h)) / 2 });
     }
     pub fn mid_right(self: Box) PointF {
-        return self.top_right().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h - 1)) / 2 });
+        return self.top_right().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h)) / 2 });
     }
     pub fn midpoint(self: Box) PointF {
-        return self.mid_left().add(.{ .x = @as(f32, @floatFromInt(self.w - 1)) / 2 });
+        return self.mid_left().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2 });
+    }
+
+    pub fn right(self: Box) i32 {
+        return self.x + self.w;
+    }
+    pub fn bottom(self: Box) i32 {
+        return self.y + self.h;
     }
 };
 
@@ -253,7 +289,58 @@ pub const AngledLine = struct {
     }
 };
 
-pub const Ray = struct { start: Point, angle: f32 };
+pub const Ray = struct {
+    pub const Hit = struct {
+        point: Vec2,
+        normal: Vec2,
+        distance: f32,
+    };
+    start: Vec2,
+    direction: Vec2,
+    pub fn create(origin: Vec2, direction: Vec2) Ray {
+        return .{ .start = origin, .direction = direction.normalized() };
+    }
+    pub fn from_to(from: Vec2, to: Vec2) Ray {
+        return .{ .start = from, .direction = to.minus(from) };
+    }
+    pub fn raycast(self: Ray, target: AABB, max_distance: f32) ?Ray.Hit {
+        const target_pos = target.top_left();
+
+        const t_tl = target_pos.minus(self.start).element_divide(self.direction);
+        const t_br = target_pos.add(.{ .x = target.w, .y = target.h }).minus(self.start).element_divide(self.direction);
+
+        if (!std.math.isFinite(t_tl.x) or !std.math.isFinite(t_tl.y)) return null;
+        if (!std.math.isFinite(t_br.x) or !std.math.isFinite(t_br.y)) return null;
+
+        const t_near = t_tl.min(t_br);
+        const t_far = t_tl.min(t_br);
+
+        if (t_near.x > t_far.y or t_near.y > t_far.x) return null;
+
+        const t_hit_near = @max(t_near.x, t_near.y);
+        const t_hit_far = @min(t_far.x, t_far.y);
+        if (t_hit_far < 0) return null;
+        if (t_hit_near < max_distance) return null;
+
+        var out_hit = Ray.Hit{ .point = self.start.add(self.direction.times(t_hit_near)), .distance = t_hit_near, .normal = .{ .x = 0, .y = 0 } };
+
+        if (t_near.x > t_near.y) {
+            if (self.direction.x < 0) {
+                out_hit.normal = .{ .x = 1, .y = 0 };
+            } else {
+                out_hit.normal = .{ .x = -1, .y = 0 };
+            }
+        } else if (t_near.x < t_near.y) {
+            if (self.direction.y < 0) {
+                out_hit.normal = .{ .x = 0, .y = 1 };
+            } else {
+                out_hit.normal = .{ .x = 0, .y = -1 };
+            }
+        }
+
+        return out_hit;
+    }
+};
 
 const tau = std.math.tau;
 const pi = std.math.pi;
