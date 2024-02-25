@@ -163,7 +163,7 @@ pub const Box = struct {
         return sx2 > ox1 and sy2 > oy1 and sx1 < ox2 and sy1 < oy2;
     }
     pub fn offset(self: Box, x: i32, y: i32) Box {
-        return .{ .x = x + self.x, .y = y + self.y, .w = self.w, .h = self.h };
+        return .{ .x = self.x + x, .y = self.y + y, .w = self.w, .h = self.h };
     }
     pub fn contains(self: Box, x: i32, y: i32) bool {
         return x >= self.x and
@@ -173,50 +173,6 @@ pub const Box = struct {
     }
     pub fn inflate(self: Box, n: i32) Box {
         return .{ .x = self.x - n, .y = self.y - n, .w = self.w + n, .h = self.h + n };
-    }
-
-    pub fn segments(self: Box) [4]LineSegment {
-        return .{
-            .{ .start = self.top_right().as_float(), .end = self.bottom_right().as_float() },
-            .{ .start = self.top_left().as_float(), .end = self.top_right().as_float() },
-            .{ .start = self.bottom_left().as_float(), .end = self.top_left().as_float() },
-            .{ .start = self.bottom_right().as_float(), .end = self.bottom_left().as_float() },
-        };
-    }
-    pub fn angled_lines(self: Box) [4]AngledLine {
-        var lines: [4]AngledLine = undefined;
-        for (self.segments(), 0..) |segment, i| {
-            lines[i].line = segment;
-            lines[i].angle = @as(f32, @floatFromInt(i)) * (std.math.pi / 2.0);
-        }
-        return lines;
-    }
-    pub fn top_left(self: Box) Point {
-        return .{ .x = self.x, .y = self.y };
-    }
-    pub fn top_mid(self: Box) PointF {
-        return self.top_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2, .y = 0 });
-    }
-    pub fn top_right(self: Box) Point {
-        return .{ .x = self.right(), .y = self.y };
-    }
-    pub fn bottom_left(self: Box) Point {
-        return .{ .x = self.x, .y = self.bottom() };
-    }
-    pub fn bottom_mid(self: Box) PointF {
-        return self.bottom_left().as_float().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2, .y = 0 });
-    }
-    pub fn bottom_right(self: Box) Point {
-        return .{ .x = self.right(), .y = self.bottom() };
-    }
-    pub fn mid_left(self: Box) PointF {
-        return self.top_left().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h)) / 2 });
-    }
-    pub fn mid_right(self: Box) PointF {
-        return self.top_right().as_float().add(.{ .x = 0, .y = @as(f32, @floatFromInt(self.h)) / 2 });
-    }
-    pub fn midpoint(self: Box) PointF {
-        return self.mid_left().add(.{ .x = @as(f32, @floatFromInt(self.w)) / 2 });
     }
 
     pub fn right(self: Box) i32 {

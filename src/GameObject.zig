@@ -168,11 +168,8 @@ pub fn overlaps_box(self: *GameObject, ox: i32, oy: i32, box: types.Box) bool {
     const selfbox = self.world_hitbox().offset(ox, oy);
     return selfbox.overlapping(box);
 }
-pub fn contains(self: *GameObject, px: u64, py: u64) bool {
-    return px >= self.x + self.hit_x and
-        px < self.x + self.hit_x + self.hit_w and
-        py >= self.y + self.hit_y and
-        py < self.y + self.hit_y + self.hit_h;
+pub fn contains(self: *GameObject, px: i32, py: i32) bool {
+    return self.world_hitbox().contains(px, py);
 }
 pub fn check_solid(self: *GameObject, ox: i32, oy: i32) bool {
     const hitbox = self.world_hitbox().offset(ox, oy);

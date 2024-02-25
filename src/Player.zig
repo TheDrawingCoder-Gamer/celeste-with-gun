@@ -391,8 +391,8 @@ pub fn update(self: *Player) void {
     // apply
     const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
     // hack
-    _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
     _ = vtable.move_y(self, self.game_object.speed_y * gravity_multiplier, @ptrCast(&on_collide_y));
+    _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
 
     // sprite
     if (self.state == .dash) {
@@ -549,7 +549,7 @@ fn correction_func(self: *Player, ox: i32, oy: i32) bool {
 pub fn on_collide_x(self: *Player, moved: i32, target: i32) bool {
     switch (self.state) {
         .normal => {
-            if (@as(i2, @intCast(std.math.sign(target))) == self.input.input_x and self.corner_correct(0, 2, 2, .{ .only_sign = -1, .func = &correction_func })) {
+            if (@as(i2, @intCast(std.math.sign(target))) == self.input.input_x and self.corner_correct(self.input.input_x, 2, 2, .{ .only_sign = -1, .func = &correction_func })) {
                 return false;
             }
         },
@@ -631,6 +631,7 @@ pub fn draw(self: *Player) void {
     const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
+    self.game_object.debug_draw_hitbox();
 }
 
 fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) bool {
