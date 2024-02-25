@@ -631,7 +631,6 @@ pub fn draw(self: *Player) void {
     const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
-    self.game_object.debug_draw_hitbox();
 }
 
 fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) bool {

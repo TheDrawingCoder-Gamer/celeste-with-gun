@@ -79,9 +79,9 @@ fn update(ctx: *anyopaque) void {
     if (self.active and self.t_progress < 20) {
         self.t_progress += 1;
         const progress: f32 = @as(f32, @floatFromInt(self.t_progress)) / 20;
-        const x: i32 = @intFromFloat(types.lerp(@floatFromInt(self.start_x), @floatFromInt(self.target.x), progress));
-        const y: i32 = @intFromFloat(types.lerp(@floatFromInt(self.start_y), @floatFromInt(self.target.y), progress));
-        Solid.move_to(.{ .ptr = self, .table = table }, x, y);
+        const x = types.lerp(@floatFromInt(self.start_x), @floatFromInt(self.target.x), progress);
+        const y = types.lerp(@floatFromInt(self.start_y), @floatFromInt(self.target.y), progress);
+        Solid.move_to_point_once(.{ .ptr = self, .table = table }, .{ .x = x, .y = y });
     }
 }
 fn draw(ctx: *anyopaque) void {
@@ -96,5 +96,9 @@ fn draw(ctx: *anyopaque) void {
     tic.PALETTE_MAP.color1 = 11;
     defer tdraw.set4bpp();
     defer tdraw.reset_pallete();
-    tic.spr(1540, x1 + (w / 2) - 3, y1 + (h / 2) - 3, .{ .transparent = &.{0} });
+    const spr_x = x1 +
+        if (@mod(self.width, 2) != 0) @divFloor(self.width, 2) * 8 else self.width * 4 - 4;
+    const spr_y = y1 +
+        if (@mod(self.height, 2) != 0) @divFloor(self.height, 2) * 8 else self.height * 4 - 4;
+    tic.spr(1540, spr_x, spr_y, .{ .transparent = &.{0} });
 }
