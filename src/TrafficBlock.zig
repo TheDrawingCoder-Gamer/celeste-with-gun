@@ -125,23 +125,68 @@ fn update(ctx: *anyopaque) void {
     self.gear_frame = @mod(self.gear_frame, 4);
 }
 
-fn draw_chain(self: *TrafficBlock) void {
-    const cam = self.game_object.game_state.camera();
-    const start_x = self.start.x - cam.x;
-    const start_y = self.start.y - cam.y;
-    const end_x = self.target.x - cam.x;
-    const end_y = self.target.y - cam.y;
+fn draw_semicircle(x: i32, y: i32, radius: i32, direction: types.PointF, color: u4) void {
+    const node1 = n: {
+        var tmp = direction;
+        tmp.x = -direction.y;
+        tmp.y = direction.x;
+        break :n tmp.times(@floatFromInt(radius)).add(types.Point.as_float(.{ .x = radius, .y = radius }));
+    };
+    const node2 = n: {
+        var tmp = direction;
+        tmp.x = direction.y;
+        tmp.y = -direction.x;
+        break :n tmp.times(@floatFromInt(radius)).add(types.Point.as_float(.{ .x = radius, .y = radius }));
+    };
+    const rev_dir = direction.times(-1);
 
-    const line_color = 1;
-    tic.line(@floatFromInt(start_x + 4), @floatFromInt(start_y), @floatFromInt(end_x + 4), @floatFromInt(end_y), line_color);
-    tic.line(@floatFromInt(start_x + 4), @floatFromInt(start_y + 8), @floatFromInt(end_x + 4), @floatFromInt(end_y + 8), line_color);
+    const clip_x = if (rev_dir.x < 0) .{ @min(node1.x, node2.x), @as(f32, 0) } else .{ @as(f32, 8), @max(node1.x, node2.x) };
+    const clip_y = if (rev_dir.y < 0) .{ @min(node1.y, node2.y), @as(f32, 0) } else .{ @as(f32, 8), @max(node1.y, node2.y) };
 
-    tic.clip(start_x, start_y, 4, 8);
-    tic.circb(start_x + 4, start_y + 4, 4, line_color);
-    tic.clip(end_x + 4, end_y, 4, 8);
-    tic.circb(end_x + 4, end_y + 4, 4, line_color);
+    tic.clip(x + @as(i32, @intFromFloat(@round(clip_x[1]))), y, @intFromFloat(clip_x[0]), 8);
+    tic.circb(x + radius, y + radius, radius, color);
+    tic.clip(x, y + @as(i32, @intFromFloat(@round(clip_y[1]))), 8, @intFromFloat(clip_y[0]));
+    tic.circb(x + radius, y + radius, radius, color);
 
     tic.noclip();
+}
+fn draw_chain(self: *TrafficBlock) void {
+    const radius = 3;
+    const gear_size = 3;
+
+    const offset_x = self.target.x - self.start.x;
+    const offset_y = self.target.y - self.start.y;
+    const offset = types.PointF.normalized(.{ .x = @floatFromInt(offset_x), .y = @floatFromInt(offset_y) });
+    const node1 = n: {
+        var tmp = offset;
+        tmp.x = -offset.y;
+        tmp.y = offset.x;
+        break :n tmp.times(radius).add(.{ .x = radius, .y = radius });
+    };
+    const node2 = n: {
+        var tmp = offset;
+        tmp.x = offset.y;
+        tmp.y = -offset.x;
+        break :n tmp.times(radius).add(.{ .x = radius, .y = radius });
+    };
+    // ((self.width * 8) / 2) - 4
+    const w_offset = (self.width - 1) * 4;
+    const h_offset = (self.height - 1) * 4;
+    const cam = self.game_object.game_state.camera();
+    const start_x = self.start.x - cam.x + w_offset;
+    const start_x_f: f32 = @floatFromInt(start_x);
+    const start_y = self.start.y - cam.y + h_offset;
+    const start_y_f: f32 = @floatFromInt(start_y);
+    const end_x = self.target.x - cam.x + w_offset;
+    const end_x_f: f32 = @floatFromInt(end_x);
+    const end_y = self.target.y - cam.y + h_offset;
+    const end_y_f: f32 = @floatFromInt(end_y);
+
+    const line_color = 1;
+    tic.line(start_x_f + node1.x, start_y_f + node1.y, end_x_f + node1.x, end_y_f + node1.y, line_color);
+    tic.line(start_x_f + node2.x, start_y_f + node2.y, end_x_f + node2.x, end_y_f + node2.y, line_color);
+    draw_semicircle(start_x, start_y, gear_size, offset, line_color);
+    draw_semicircle(end_x, end_y, gear_size, offset.times(-1), line_color);
 
     defer tdraw.set4bpp();
     tdraw.set2bpp();
@@ -169,7 +214,6 @@ fn draw(ctx: *anyopaque) void {
     tic.rect(x, y, self.width * 8, self.height * 8, 8);
     tdraw.set2bpp();
     tic.clip(x, y, self.width * 8, self.height * 8);
-    defer tic.noclip();
     {
         const gear_frame: i32 = @intFromFloat(self.gear_frame);
         const clockwise_frame: i32 = gear_frame + 992;
@@ -222,6 +266,7 @@ fn draw(ctx: *anyopaque) void {
         .retreating, .stalled => 4,
     };
     tic.spr(434, point, y, .{ .transparent = &.{1} });
+    tic.noclip();
 }
 
 fn get_object(ctx: *anyopaque) *GameObject {

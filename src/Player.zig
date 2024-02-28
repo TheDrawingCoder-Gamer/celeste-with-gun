@@ -42,7 +42,8 @@ t_death: u8 = 0,
 voice: *Voice,
 mode: Mode = .dash,
 t_dash_time: u8 = 0,
-can_dash: bool = true,
+dashes: u8 = 2,
+max_dashes: u8 = 2,
 host: bool = false,
 // doesn't affect hitbox, only used for detecting wave and hyper dashes
 crouching: bool = false,
@@ -52,6 +53,12 @@ recharging: bool = false,
 t_platform_velocity_storage: u8 = 0,
 platform_velocity: types.PointF = .{ .x = 0, .y = 0 },
 fully_riding: bool = false,
+skull_offset: types.Point = .{ .x = 0, .y = 0 },
+last_velocity: types.PointF = .{},
+char_sliding: bool = false,
+last_accel: types.PointF = .{},
+follow_thru_accel: types.PointF = .{},
+t_accel_follow_thru: u8 = 0,
 
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !*Player {
     var obj = GameObject.create(state, x, y);
@@ -147,7 +154,9 @@ fn jump(self: *Player) void {
 fn super_dash(self: *Player, recover: bool) void {
     self.game_object.speed_x = std.math.sign(self.game_object.speed_x) * 3;
     _ = self.raw_jump(false);
-    self.can_dash = recover;
+    if (recover) {
+        self.refill_dashes();
+    }
     self.reset_dash_info();
     self.voice.play(2, .{ .volume = 5 });
 }
@@ -161,7 +170,9 @@ fn dash_jump(self: *Player, recover: bool) void {
     self.t_jump_grace = 0;
     self.auto_var_jump = false;
     self.reset_dash_info();
-    self.can_dash = recover;
+    if (recover) {
+        self.refill_dashes();
+    }
     _ = self.add_platform_velocity(false);
     self.voice.play(2, .{ .volume = 5 });
     _ = vtable.move_y(self, @floatFromInt(self.jump_grace_y - self.game_object.y), null);
@@ -200,7 +211,7 @@ fn wall_jump(self: *Player, dir: i2) void {
 fn dash(self: *Player) void {
     _ = self.input.consume_action_press();
     self.state = .dash;
-    self.can_dash = false;
+    self.dashes -= 1;
     self.recharging = false;
     self.t_recharge = 0;
     self.down_dash = self.input.input_y > 0;
@@ -261,6 +272,8 @@ pub fn update(self: *Player) void {
     if (self.t_platform_velocity_storage > 0)
         self.t_platform_velocity_storage -= 1;
     var sliding = false;
+    self.last_accel = self.game_object.velocity().minus(self.last_velocity);
+    self.last_velocity = self.game_object.velocity();
     switch (self.state) {
         .normal => {
             if (self.input.input_x != 0) {
@@ -308,10 +321,10 @@ pub fn update(self: *Player) void {
                 self.recharging = false;
                 self.t_recharge = 0;
             } else {
-                if (!self.can_dash and self.t_recharge == 0) {
+                if (self.dashes < self.max_dashes and self.t_recharge == 0) {
                     if (self.recharging) {
                         self.recharging = false;
-                        self.can_dash = true;
+                        self.refill_dashes();
                     } else {
                         self.recharging = true;
                         self.t_recharge = 6;
@@ -343,7 +356,7 @@ pub fn update(self: *Player) void {
                 switch (self.mode) {
                     .grapple => {},
                     .dash => {
-                        if (self.can_dash)
+                        if (self.dashes > 0)
                             self.dash();
                     },
                     .none => {},
@@ -395,6 +408,8 @@ pub fn update(self: *Player) void {
     _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
 
     // sprite
+    self.char_sliding = false;
+    self.skull_offset = .{};
     if (self.state == .dash) {
         self.spr = 538;
     } else if (self.t_fire_pose > 0) {
@@ -405,6 +420,7 @@ pub fn update(self: *Player) void {
         };
     } else if (!on_ground) {
         if (sliding) {
+            self.char_sliding = true;
             self.spr = 522;
         } else {
             if (self.game_object.speed_y > 0) {
@@ -413,19 +429,27 @@ pub fn update(self: *Player) void {
                 self.spr = 515;
             }
         }
-    } else if (self.input.input_x != 0) {
-        if (self.crouching) {
-            const frame = @divFloor(self.game_object.game_state.time, 9);
-            self.spr = 560 + @as(i32, @intCast(frame % 3));
-        } else {
-            const frame = @divFloor(self.game_object.game_state.time, 8);
-            self.spr = 513 + @as(i32, @intCast(frame % 4));
-        }
     } else {
         if (self.crouching) {
-            self.spr = 560;
+            self.skull_offset.y = 2;
+        }
+        if (self.input.input_x != 0) {
+            if (self.crouching) {
+                const frame: i32 = @intCast(@divFloor(self.game_object.game_state.time, 9) % 3);
+                if (frame == 1) {
+                    self.skull_offset.y = 1;
+                }
+                self.spr = 560 + frame;
+            } else {
+                const frame = @divFloor(self.game_object.game_state.time, 8);
+                self.spr = 513 + @as(i32, @intCast(frame % 4));
+            }
         } else {
-            self.spr = 512;
+            if (self.crouching) {
+                self.spr = 560;
+            } else {
+                self.spr = 512;
+            }
         }
     }
 
@@ -570,18 +594,25 @@ pub fn on_collide_y(self: *Player, moved: i32, target: i32) bool {
     if (self.state == .dash and self.corner_correct(0, std.math.sign(target), 4, .{ .only_sign = 0, .func = &correction_func })) {
         return false;
     }
+    if (target < 0) {
+        self.t_accel_follow_thru = 1;
+    }
 
     return GameObject.on_collide_y(&self.game_object, moved, target);
 }
 
-pub fn pallete(player: u2) void {
-    @call(.always_inline, dash_palette, .{ player, false, false });
+pub inline fn pallete(player: u2) void {
+    dash_palette(player, 1, false);
 }
 
-pub fn dash_palette(player: u2, dashing_player: bool, recharging: bool) void {
+pub fn dash_palette(player: u2, dash_n: u8, recharging: bool) void {
     const baseColor: u4 = switch (player) {
-        0 => if (dashing_player) 9 else 2,
-        1 => if (dashing_player) 1 else 3,
+        0 => switch (dash_n) {
+            0 => 9,
+            2 => 5,
+            else => 2,
+        },
+        1 => 3,
         // ???
         2 => 5,
         3 => 9,
@@ -610,9 +641,15 @@ pub fn sniff_zone(self: *const Player) types.Box {
     };
 }
 
+fn clamp_mag_high(x: i32, magnitude: i32) i32 {
+    if (x < 0) {
+        return @max(x, -magnitude);
+    }
+    return @min(x, magnitude);
+}
 pub fn draw(self: *Player) void {
     const obj = self.get_object();
-    dash_palette(self.input.player, !self.can_dash, self.recharging);
+    dash_palette(self.input.player, self.dashes, self.recharging);
     defer reset_pallete();
     defer tdraw.set4bpp();
     if (self.state == .death) {
@@ -626,9 +663,36 @@ pub fn draw(self: *Player) void {
         return;
     }
 
-    // _ = tic80.vbank(1);
     tdraw.set2bpp();
-    const facing: tic80.Flip = if (obj.facing != 1) .horizontal else .no;
+    const facing: tic80.Flip = if ((obj.facing != 1) != (self.char_sliding)) .horizontal else .no;
+    if (self.state == .dash or self.dashes == 0) {
+        var skull_offset_y: i32 = 0;
+        if (self.recharging) {
+            skull_offset_y = 3;
+            skull_offset_y -= self.t_recharge / 3;
+        }
+        self.game_object.game_state.draw_spr(553, obj.x, obj.y + skull_offset_y, .{ .flip = facing, .transparent = &.{0} });
+        return;
+    }
+    const accel = obj.velocity().minus(self.last_velocity);
+    const len2 = accel.length_squared();
+    const last_len2 = self.last_accel.length_squared();
+    if (len2 > 1.0 and (len2 > last_len2 or self.t_accel_follow_thru <= 0)) {
+        self.t_accel_follow_thru = 6;
+        self.follow_thru_accel = accel;
+    }
+    if (self.t_accel_follow_thru > 0) {
+        self.t_accel_follow_thru -= 1;
+    }
+    //const skull_offset_x: i32 = clamp_mag_high(-@as(i32, @intFromFloat(obj.speed_x / 1.5)), 5) + self.skull_offset.x;
+    const skull_offset_y: i32 = self.skull_offset.y +
+        if (self.t_accel_follow_thru > 0)
+        clamp_mag_high(@as(i32, @intFromFloat(-self.follow_thru_accel.y)), 2)
+    else
+        0;
+    self.game_object.game_state.draw_spr(553, obj.x, obj.y + skull_offset_y, .{ .flip = facing, .transparent = &.{0} });
+
+    // _ = tic80.vbank(1);
     self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
 }
@@ -682,4 +746,8 @@ fn add_platform_velocity(self: *Player, play_sound: bool) bool {
 
 pub fn as_table(self: *Player) GameObject.IsGameObject {
     return .{ .ptr = self, .table = vtable };
+}
+
+pub inline fn refill_dashes(self: *Player) void {
+    self.dashes = self.max_dashes;
 }

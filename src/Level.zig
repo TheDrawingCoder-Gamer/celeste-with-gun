@@ -57,7 +57,7 @@ pub const Room = struct {
     }
 };
 const level1_entities = [_]Entity{.{ .x = 3 * 8, .y = 6 * 8, .kind = .{ .traffic_block = .{ .w = 3, .h = 3, .target = .{ .x = 3 * 8, .y = 4 * 8 } } } }};
-const level3_entities = [_]Entity{ .{ .x = 68 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 4, .h = 1, .target = .{ .x = 98 * 8, .y = 15 * 8 } } } }, .{ .x = 110 * 8, .y = 13 * 8, .kind = .{ .traffic_block = .{ .w = 3, .h = 3, .target = .{ .x = 130 * 8, .y = 13 * 8 } } } } };
+const level3_entities = [_]Entity{ .{ .x = 68 * 8, .y = 15 * 8, .kind = .{ .switch_door = .{ .kind = 0, .w = 4, .h = 1, .target = .{ .x = 98 * 8, .y = 15 * 8 } } } }, .{ .x = 130 * 8, .y = 10 * 8, .kind = .{ .traffic_block = .{ .w = 3, .h = 3, .target = .{ .x = 110 * 8, .y = 13 * 8 } } } } };
 pub const rooms = [_]Room{ .{ .box = .{ .x = 0, .y = 0, .w = 30, .h = 17 }, .entities = &level1_entities }, .{ .box = .{
     .x = 30,
     .y = 0,
@@ -144,7 +144,10 @@ pub fn init(self: *Level) !void {
                     _ = try Crumble.create(self.state.allocator, self.state, x * 8, y * 8);
                 },
                 35 => {
-                    _ = try Destructible.create(self.state.allocator, x, y, self.state);
+                    _ = try Destructible.create(self.state.allocator, x, y, false, self.state);
+                },
+                37 => {
+                    _ = try Destructible.create(self.state.allocator, x, y, true, self.state);
                 },
                 17, 18, 19 => |it| {
                     const res = it - 16;

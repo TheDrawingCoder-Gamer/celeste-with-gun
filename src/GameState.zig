@@ -135,7 +135,7 @@ pub fn loop(self: *GameState) void {
             const room = Level.find_at(player.game_object.x, player.game_object.y);
             if (room) |r| {
                 // screen refill
-                player.can_dash = true;
+                player.refill_dashes();
                 r.load_level(self).load() catch unreachable;
             } else {
                 // ???

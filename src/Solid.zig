@@ -39,7 +39,7 @@ pub fn move_by_with_speed(self: GameObject.IsGameObject, delta: PointF, speed: P
                 const was_riding = if (rider) |r| r.riding_platform_check(self) else false;
                 if (left or right) {
                     // use move_x move_y to prevent sadness
-                    if (obj.overlaps(actor, move_x, move_y)) {
+                    if (obj.overlaps(actor, move_x, 0)) {
                         // Push
                         const their_hitbox = actor.obj().world_hitbox();
                         const movement = if (left) our_hitbox.x - their_hitbox.right() else our_hitbox.right() - their_hitbox.x;
@@ -52,10 +52,10 @@ pub fn move_by_with_speed(self: GameObject.IsGameObject, delta: PointF, speed: P
                 }
                 if (up or down) {
                     // use move_x move_y to prevent sadness
-                    if (obj.overlaps(actor, move_x, move_y)) {
+                    if (obj.overlaps(actor, 0, move_y)) {
                         // Push
                         const their_hitbox = actor.obj().world_hitbox();
-                        const movement = if (up) our_hitbox.y - their_hitbox.bottom() else our_hitbox.bottom() - their_hitbox.y;
+                        const movement = if (up) our_hitbox.y - their_hitbox.bottom() - 1 else our_hitbox.bottom() - their_hitbox.y;
                         if (actor.move_y(@floatFromInt(movement), null)) {
                             actor.squish();
                         }

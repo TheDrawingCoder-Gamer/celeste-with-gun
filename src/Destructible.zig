@@ -7,14 +7,21 @@ const Player = @import("Player.zig");
 const Allocator = std.mem.Allocator;
 
 const vtable: GameObject.VTable = .{ .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .can_touch = &can_touch, .touch = &touch, .shot = &shot };
-
+const shot_vtable: GameObject.VTable = .{ .ptr_draw = @ptrCast(&draw_shotonly), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .shot = &shot };
 pub fn draw(self: *GameObject) void {
     self.game_state.draw_spr(272, self.x, self.y, .{ .w = 2, .h = 2, .transparent = &.{0} });
+}
+fn draw_shotonly(self: *GameObject) void {
+    tdraw.set2bpp();
+    tic.PALETTE_MAP.color3 = 12;
+    self.game_state.draw_spr(966, self.x, self.y, .{ .w = 2, .h = 2, .transparent = &.{0} });
+    tdraw.set4bpp();
+    tdraw.reset_pallete();
 }
 fn get_object(self: *GameObject) *GameObject {
     return self;
 }
-pub fn create(allocator: std.mem.Allocator, x: i32, y: i32, state: *GameState) !*GameObject {
+pub fn create(allocator: std.mem.Allocator, x: i32, y: i32, shot_only: bool, state: *GameState) !*GameObject {
     var self = try allocator.create(GameObject);
     // cursed
     self.* = GameObject.create(state, x * 8, y * 8);
@@ -27,7 +34,7 @@ pub fn create(allocator: std.mem.Allocator, x: i32, y: i32, state: *GameState) !
     self.touchable = true;
     self.shootable = true;
 
-    const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
+    const node = try state.wrap_node(.{ .ptr = self, .table = if (shot_only) shot_vtable else vtable });
     state.objects.append(node);
 
     return self;

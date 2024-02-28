@@ -90,8 +90,13 @@ fn draw(ctx: *anyopaque) void {
     const y1: i32 = self.game_object.y - self.game_object.game_state.camera_y;
     const w = self.width * 8;
     const h = self.height * 8;
-    tic.rect(x1, y1, w, h, 14);
-    tic.rectb(x1, y1, w, h, 13);
+    tic.rect(x1, y1, w, h, 8);
+    tic.rectb(x1, y1, w, h, 9);
+    // corners
+    tic.spr(467, x1, y1, .{ .transparent = &.{0} });
+    tic.spr(467, x1 + w - 8, y1, .{ .transparent = &.{0}, .rotate = .by90 });
+    tic.spr(467, x1 + w - 8, y1 + h - 8, .{ .transparent = &.{0}, .rotate = .by180 });
+    tic.spr(467, x1, y1 + h - 8, .{ .transparent = &.{0}, .rotate = .by270 });
     tdraw.set1bpp();
     tic.PALETTE_MAP.color1 = 11;
     defer tdraw.set4bpp();
