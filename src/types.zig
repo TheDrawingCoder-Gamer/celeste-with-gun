@@ -15,6 +15,9 @@ pub const Point = struct {
     pub fn as_float(self: Point) PointF {
         return .{ .x = @floatFromInt(self.x), .y = @floatFromInt(self.y) };
     }
+    pub fn to_radians(self: Point) f32 {
+        return self.as_float().to_radians();
+    }
 };
 
 pub const Vec2 = PointF;
@@ -315,4 +318,17 @@ pub fn angle_difference(left: f32, right: f32) f32 {
 // how aligned two angles are. 1 is equavilant, -1 is literal opposites.
 pub fn angle_alignment(left: f32, right: f32) f32 {
     return @cos(angle_difference(left, right));
+}
+
+pub fn angles_contain(a_target: f32, angle1: f32, angle2: f32) bool {
+    const target = normalize_angle(a_target);
+    const r_angle = @mod(@mod(angle2 - angle1, tau) + tau, tau);
+    const a1 = if (r_angle >= pi) angle2 else angle1;
+    const a2 = if (r_angle >= pi) angle1 else angle2;
+
+    if (a1 <= a2) {
+        return target >= a1 and target <= a2;
+    } else {
+        return target >= a1 or target <= a2;
+    }
 }
