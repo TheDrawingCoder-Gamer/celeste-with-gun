@@ -139,6 +139,7 @@ hit_x: i32 = 0,
 hit_y: i32 = 0,
 hit_w: u31 = 8,
 hit_h: u31 = 8,
+hurtbox: ?types.Box = null,
 hazard: HazardType = .none,
 solid: bool = false,
 facing: i2 = 0,
@@ -164,9 +165,21 @@ pub fn overlaps(self: *GameObject, btable: IsGameObject, ox: i32, oy: i32) bool 
 pub fn world_hitbox(self: *const GameObject) types.Box {
     return .{ .x = self.x + self.hit_x, .y = self.y + self.hit_y, .w = self.hit_w, .h = self.hit_h };
 }
+pub fn world_hurtbox(self: *const GameObject) types.Box {
+    if (self.hurtbox) |h| {
+        return .{ .x = self.x + h.x, .y = self.y + h.y, .w = h.w, .h = h.h };
+    }
+    return self.world_hitbox();
+}
 pub fn overlaps_box(self: *GameObject, ox: i32, oy: i32, box: types.Box) bool {
     const selfbox = self.world_hitbox().offset(ox, oy);
     return selfbox.overlapping(box);
+}
+pub fn hurtboxes_touch(self: *GameObject, other: IsGameObject, ox: i32, oy: i32) bool {
+    const b = other.obj();
+    if (self == b)
+        return false;
+    return self.world_hurtbox().offset(ox, oy).overlapping(b.world_hurtbox());
 }
 pub fn contains(self: *GameObject, px: i32, py: i32) bool {
     return self.world_hitbox().contains(px, py);

@@ -136,6 +136,8 @@ pub fn loop(self: *GameState) void {
             if (room) |r| {
                 // screen refill
                 player.refill_dashes();
+                tic.sfx(-1, .{});
+                self.voice.play(null, .{});
                 r.load_level(self).load() catch unreachable;
             } else {
                 // ???

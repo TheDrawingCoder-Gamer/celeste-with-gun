@@ -42,8 +42,8 @@ t_death: u8 = 0,
 voice: *Voice,
 mode: Mode = .dash,
 t_dash_time: u8 = 0,
-dashes: u8 = 2,
-max_dashes: u8 = 2,
+dashes: u8 = 1,
+max_dashes: u8 = 1,
 host: bool = false,
 // doesn't affect hitbox, only used for detecting wave and hyper dashes
 crouching: bool = false,
@@ -69,6 +69,7 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *I
     obj.hit_y = 2;
     obj.hit_w = 5;
     obj.hit_h = 6;
+    obj.hurtbox = .{ .x = 2, .y = 2, .w = 4, .h = 5 };
     obj.persistent = true;
     obj.special_type = .player;
     obj.is_actor = true;
@@ -95,31 +96,40 @@ fn approach(x: f32, target: f32, max_delta: f32) f32 {
 
 fn shoot(self: *Player) void {
     _ = self.input.consume_gun_press();
+    const x_dir = if (self.input.input_y == 0 and self.input.input_x == 0) self.game_object.facing else self.input.input_x;
+    self.shoot_dir(x_dir, self.input.input_y, -1);
+
+    tic80.sfx(3, .{ .duration = 10, .volume = 5 });
+}
+fn shoot_dir(self: *Player, x: i2, y: i2, ttl: i32) void {
     const dir: Bullet.Direction = blk: {
-        if (self.input.input_y == -1) {
-            break :blk .up;
+        if (y == -1) {
+            break :blk if (x < 0)
+                .up_left
+            else if (x > 0)
+                .up_right
+            else
+                .up;
         }
-        if (self.input.input_y == 1) {
-            break :blk .down;
+        if (y > 0) {
+            break :blk if (x < 0)
+                .down_left
+            else if (x > 0)
+                .down_right
+            else
+                .down;
         }
-        if (self.game_object.facing == -1) {
-            break :blk .left;
-        }
-        if (self.game_object.facing == 1) {
-            break :blk .right;
-        }
-        return;
+        break :blk if (x == -1) .left else .right;
     };
     self.t_shoot_cooldown = 6;
     self.t_fire_pose = 8;
     self.fire_dir = dir;
     const x_offset: i32 =
         switch (dir) {
-        .up, .down => 0,
-        .left => -8,
-        .right => 0,
+        .left, .up_left, .down_left => -8,
+        else => 0,
     };
-    _ = Bullet.create(self.allocator, self.game_object.game_state, self.game_object.x + x_offset, self.game_object.y, self.input.player, dir) catch |err| {
+    _ = Bullet.create(self.allocator, self.game_object.game_state, self.game_object.x + x_offset, self.game_object.y, self.input.player, dir, ttl) catch |err| {
         switch (err) {
             error.TooMany => {},
             error.OutOfMemory => {
@@ -128,13 +138,12 @@ fn shoot(self: *Player) void {
         }
         return;
     };
-    tic80.sfx(3, .{ .duration = 10, .volume = 5 });
 }
 fn raw_jump(self: *Player, play_sound: bool) bool {
     _ = self.input.consume_jump_press();
     self.state = .normal;
-    self.game_object.speed_y = -4;
-    self.var_jump_speed = -4;
+    self.game_object.speed_y = -3;
+    self.var_jump_speed = -3;
     self.game_object.speed_x += @as(f32, @floatFromInt(self.input.input_x)) * 0.2;
     self.t_var_jump = 4;
     self.t_jump_grace = 0;
@@ -230,6 +239,7 @@ fn dash(self: *Player) void {
         4 * @as(f32, @floatFromInt(x_dir));
     self.game_object.speed_x = x_speed;
     self.game_object.speed_y = @as(f32, @floatFromInt(self.input.input_y)) * 4;
+    self.shoot_dir(x_dir, self.input.input_y, 30);
     self.t_dash_time = 8;
     self.voice.play(4, .{ .volume = 5 });
 }
@@ -415,6 +425,8 @@ pub fn update(self: *Player) void {
     } else if (self.t_fire_pose > 0) {
         self.spr = switch (self.fire_dir) {
             .right, .left => 527,
+            .up_left, .up_right => 530,
+            .down_left, .down_right => 531,
             .up => 528,
             .down => 529,
         };
@@ -488,7 +500,7 @@ pub fn hazard_check(self: *Player, args: HazardArgs) bool {
     while (it) |node| : (it = node.next) {
         const o = node.data;
         const obj = o.obj();
-        if (obj.hazard != .none and self.game_object.overlaps(o, args.ox, args.oy)) {
+        if (obj.hazard != .none and self.game_object.hurtboxes_touch(o, args.ox, args.oy)) {
             const res = switch (obj.hazard) {
                 .none => unreachable,
                 .all => true,
@@ -594,11 +606,19 @@ pub fn on_collide_y(self: *Player, moved: i32, target: i32) bool {
     if (self.state == .dash and self.corner_correct(0, std.math.sign(target), 4, .{ .only_sign = 0, .func = &correction_func })) {
         return false;
     }
+
     if (target < 0) {
         self.t_accel_follow_thru = 1;
     }
 
-    return GameObject.on_collide_y(&self.game_object, moved, target);
+    const res = GameObject.on_collide_y(&self.game_object, moved, target);
+    // bonk!
+    if (self.state == .dash) {
+        const shockwave_ttl = 5;
+        self.shoot_dir(-1, 0, shockwave_ttl);
+        self.shoot_dir(1, 0, shockwave_ttl);
+    }
+    return res;
 }
 
 pub inline fn pallete(player: u2) void {

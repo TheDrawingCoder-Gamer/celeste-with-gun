@@ -22,6 +22,7 @@ height: u31,
 last_touched: u64 = 0,
 lerp: f32 = 0,
 gear_frame: f32 = 0,
+audio_frame: i32 = 0,
 
 pub fn create(state: *GameState, x: i32, y: i32, w: u31, h: u31, target: types.Point) !*TrafficBlock {
     var obj = GameObject.create(state, x, y);
@@ -42,6 +43,7 @@ pub fn create(state: *GameState, x: i32, y: i32, w: u31, h: u31, target: types.P
 fn destroy(ctx: *anyopaque, allocator: std.mem.Allocator) void {
     const self: *TrafficBlock = @alignCast(@ptrCast(ctx));
 
+    tic.sfx(-1, .{});
     allocator.destroy(self);
 }
 
@@ -69,6 +71,7 @@ fn start_advance(self: *TrafficBlock) void {
     self.state = .advancing;
     const velocity = self.target.add(self.start.times(-1)).as_float().normalized().times(5);
     self.game_object.set_velocity(velocity);
+    self.game_object.game_state.voice.play(7, .{ .volume = 6 });
 }
 
 fn stall(self: *TrafficBlock) void {
@@ -95,24 +98,30 @@ fn update(ctx: *anyopaque) void {
     if (self.state == .idle)
         return;
 
+    tic.sfx(-1, .{});
     switch (self.state) {
         .idle => {},
         .advancing => {
             self.lerp = types.approach(self.lerp, 1, 2.0 / 60.0);
-            self.gear_frame -= 0.8;
             if (self.lerp == 1.0) {
                 self.stall();
             }
             const res = types.PointF.lerp(self.start.as_float(), self.target.as_float(), types.sine_in_out(self.lerp));
+            if (self.audio_frame >= 2) {
+                tic.sfx(6, .{ .note = 6, .octave = 3, .volume = 6 });
+            }
+            self.gear_frame -= 0.8;
             Solid.move_to_point_once(self.as_table(), res);
         },
         .retreating => {
             self.lerp = types.approach(self.lerp, 0, 0.5 / 60.0);
-            self.gear_frame += 0.2;
             if (self.lerp == 0.0) {
                 self.stop();
+            } else {
+                tic.sfx(6, .{ .note = if (self.gear_frame >= 1.5) 11 else 0, .octave = 1, .volume = 6 });
             }
             const res = types.PointF.lerp(self.start.as_float(), self.target.as_float(), types.sine_in_out(self.lerp));
+            self.gear_frame += 0.2;
             Solid.move_to_point_once(self.as_table(), res);
         },
         .stalled => {
@@ -123,6 +132,7 @@ fn update(ctx: *anyopaque) void {
         },
     }
     self.gear_frame = @mod(self.gear_frame, 4);
+    self.audio_frame += @mod(self.audio_frame + 1, 10);
 }
 
 fn draw_chain(self: *TrafficBlock) void {
