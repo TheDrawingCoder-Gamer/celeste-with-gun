@@ -49,6 +49,7 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, dir: type
         .down => .by180,
         .left => .by270,
     };
+    self.length = length;
 
     const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
     state.objects.append(node);

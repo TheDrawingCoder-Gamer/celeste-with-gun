@@ -23,7 +23,7 @@ player_y: i32 = 0,
 cam_mode: SavedLevel.CamMode,
 state: *GameState,
 entities: []const SavedLevel.Entity,
-player_starts: [64]types.Point = undefined,
+player_starts: [16]types.Point = undefined,
 
 // ???
 pub var rooms: []SavedLevel = undefined;
@@ -38,6 +38,8 @@ pub fn from_saved(saved: *const SavedLevel, state: *GameState) *Level {
         .state = state,
         .entities = saved.entities,
     };
+    @memset(&state.loaded_level.player_starts, .{ .x = -1, .y = -1 });
+
     return &state.loaded_level;
 }
 pub fn load(self: *Level) !void {
@@ -52,19 +54,20 @@ pub fn load(self: *Level) !void {
         const node = try self.state.wrap_node(player.as_table());
         self.state.objects.append(node);
     }
-    const player_p = player.game_object.point().times(1 / 8).trunc();
+    const player_p = types.Point.as_float(.{ .x = player.game_object.x, .y = player.game_object.y }).div(8).trunc();
     {
         var lowest: types.Point = .{ .x = -1, .y = -1 };
         var lowest_d: f32 = std.math.inf(f32);
         for (self.player_starts) |ps| {
             if (ps.x == -1 and ps.y == -1)
-                break;
+                continue;
             const d = player_p.distance_squared(ps.as_float());
             if (d < lowest_d) {
                 lowest = ps;
                 lowest_d = d;
             }
         }
+        tic.tracef("{any} {any}", .{ lowest, player_p });
         self.player_x = lowest.x;
         self.player_y = lowest.y;
     }

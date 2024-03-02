@@ -31,6 +31,9 @@ pub const PointF = struct {
     pub fn times(self: PointF, scalar: f32) PointF {
         return .{ .x = self.x * scalar, .y = self.y * scalar };
     }
+    pub fn div(self: PointF, scalar: f32) PointF {
+        return .{ .x = self.x / scalar, .y = self.y / scalar };
+    }
     pub fn as_int(self: PointF) Point {
         return .{ .x = @intFromFloat(self.x), .y = @intFromFloat(self.y) };
     }
