@@ -1,9 +1,12 @@
-const tic = @import("tic80.zig");
+const common = @import("common");
+const SavedLevel = common.Level;
+const tic = common.tic;
 const Player = @import("Player.zig");
 const GameState = @import("GameState.zig");
 const Input = @import("Input.zig");
 const std = @import("std");
 const Buddy2Allocator = @import("buddy2").Buddy2Allocator(.{});
+const s2s = @import("s2s");
 const Level = @import("Level.zig");
 const Audio = @import("Audio.zig");
 
@@ -13,6 +16,7 @@ var input_1: Input = undefined;
 var audio: Audio.Voice = .{ .channel = 3 };
 var aux_audio: Audio.Voice = .{ .channel = 2 };
 var buddy2: Buddy2Allocator = undefined;
+var startup_t: u8 = 0;
 // var gpa: std.heap.GeneralPurposeAllocator(.{}) = undefined;
 
 var allocator: std.mem.Allocator = undefined;
@@ -22,17 +26,29 @@ export fn BOOT() void {
 
     input_1 = .{ .player = 0 };
     game_state = GameState.init(allocator, &input_1, &audio, &aux_audio);
-    Level.rooms[2].load_level(&game_state).start() catch unreachable;
+    tic.sync(.{ .bank = 7, .sections = .{ .map = true } });
+    var fb = std.io.fixedBufferStream(tic.MAP);
+    Level.rooms = s2s.deserializeAlloc(fb.reader(), []SavedLevel, allocator) catch unreachable;
+    Level.from_saved(&Level.rooms[0], &game_state).start() catch unreachable;
     //for (Audio.music_patterns, 0..) |pattern, i| {
     //    tic.tracef("{d}, {any}", .{ i, pattern.get(0) });
     //}
 }
 
 export fn TIC() void {
-    input_1.update();
-    audio.process();
-    // audio.sfx(5, 10, 0);
-    game_state.loop();
+    switch (startup_t) {
+        0, 1 => {
+            tic.sync(.{ .bank = 0, .sections = .{ .map = true } });
+        },
+        else => {
+            input_1.update();
+            audio.process();
+            // audio.sfx(5, 10, 0);
+            game_state.loop();
+            return;
+        },
+    }
+    startup_t += 1;
 }
 
 export fn BDR() void {}

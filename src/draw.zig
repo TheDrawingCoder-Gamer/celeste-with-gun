@@ -1,4 +1,4 @@
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const std = @import("std");
 const types = @import("types.zig");
 

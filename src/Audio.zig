@@ -1,7 +1,7 @@
 const Audio = @This();
 
 const std = @import("std");
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 
 pub const Waveform = [16]u8;
 pub const FreqVolume = packed struct(u16) {

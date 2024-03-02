@@ -1,6 +1,6 @@
 const GameObject = @This();
 
-const tic80 = @import("tic80.zig");
+const tic80 = @import("common").tic;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const GameState = @import("GameState.zig");

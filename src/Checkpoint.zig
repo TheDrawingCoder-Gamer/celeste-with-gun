@@ -5,7 +5,7 @@ const GameState = @import("GameState.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const tdraw = @import("draw.zig");
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const Voice = @import("Audio.zig").Voice;
 const Player = @import("Player.zig");
 

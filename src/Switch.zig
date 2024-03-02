@@ -1,6 +1,6 @@
 const Switch = @This();
 
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const GameObject = @import("GameObject.zig");
 const GameState = @import("GameState.zig");
 const std = @import("std");

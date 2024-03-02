@@ -1,6 +1,6 @@
 const Input = @This();
 
-const tic80 = @import("tic80.zig");
+const tic80 = @import("common").tic;
 const std = @import("std");
 
 player: u2,

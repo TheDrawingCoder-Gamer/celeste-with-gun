@@ -1,5 +1,5 @@
 const tdraw = @import("draw.zig");
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const GameObject = @import("GameObject.zig");
 const GameState = @import("GameState.zig");
 const std = @import("std");
@@ -24,7 +24,7 @@ fn get_object(self: *GameObject) *GameObject {
 pub fn create(allocator: std.mem.Allocator, x: i32, y: i32, shot_only: bool, state: *GameState) !*GameObject {
     var self = try allocator.create(GameObject);
     // cursed
-    self.* = GameObject.create(state, x * 8, y * 8);
+    self.* = GameObject.create(state, x, y);
     self.solid = true;
     self.hit_x = 0;
     self.hit_y = 0;

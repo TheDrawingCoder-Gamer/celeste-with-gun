@@ -1,6 +1,6 @@
 const TrafficBlock = @This();
 
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const Player = @import("Player.zig");
 const GameObject = @import("GameObject.zig");
 const GameState = @import("GameState.zig");

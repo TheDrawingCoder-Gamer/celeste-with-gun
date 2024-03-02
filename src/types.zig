@@ -1,121 +1,17 @@
 const types = @This();
 
 const std = @import("std");
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
+const math = @import("common").math;
 
-pub const Point = struct {
-    x: i32 = 0,
-    y: i32 = 0,
-    pub fn add(self: Point, other: Point) Point {
-        return .{ .x = self.x + other.x, .y = self.y + other.y };
-    }
-    pub fn times(self: Point, scalar: i32) Point {
-        return .{ .x = self.x * scalar, .y = self.y * scalar };
-    }
-    pub fn as_float(self: Point) PointF {
-        return .{ .x = @floatFromInt(self.x), .y = @floatFromInt(self.y) };
-    }
-    pub fn to_radians(self: Point) f32 {
-        return self.as_float().to_radians();
-    }
-};
+pub const Point = math.Point;
 
 pub const Vec2 = PointF;
-pub const PointF = struct {
-    x: f32 = 0,
-    y: f32 = 0,
-    pub fn add(self: PointF, other: PointF) PointF {
-        return .{ .x = self.x + other.x, .y = self.y + other.y };
-    }
-    pub fn minus(self: PointF, other: PointF) PointF {
-        return .{ .x = self.x - other.x, .y = self.y - other.y };
-    }
-    pub fn times(self: PointF, scalar: f32) PointF {
-        return .{ .x = self.x * scalar, .y = self.y * scalar };
-    }
-    pub fn as_int(self: PointF) Point {
-        return .{ .x = @intFromFloat(self.x), .y = @intFromFloat(self.y) };
-    }
-    pub fn min(left: PointF, right: PointF) PointF {
-        return .{ .x = @min(left.x, right.x), .y = @min(left.y, right.y) };
-    }
-    pub fn max(left: PointF, right: PointF) PointF {
-        return .{ .x = @max(left.x, right.x), .y = @max(left.y, right.y) };
-    }
-    pub fn from_radians(angle: f32) PointF {
-        const x = @cos(angle);
-        const y = -@sin(angle);
-        return .{ .x = x, .y = y };
-    }
-    pub fn normalized(self: PointF) PointF {
-        const len = self.length();
-        // panics (?) on divide by 0
-        return .{ .x = self.x / len, .y = self.y / len };
-    }
-    pub fn to_radians(self: PointF) f32 {
-        return std.math.atan2(-self.y, self.x);
-    }
-    pub fn length_squared(self: PointF) f32 {
-        return std.math.pow(f32, self.x, 2) + std.math.pow(f32, self.y, 2);
-    }
-    pub fn length(self: PointF) f32 {
-        return std.math.sqrt(self.length_squared());
-    }
-    pub fn distance_squared(self: PointF, other: PointF) f32 {
-        return std.math.pow(f32, self.x - other.x, 2) + std.math.pow(f32, self.y - other.y, 2);
-    }
-    pub fn distance(self: PointF, other: PointF) f32 {
-        return std.math.sqrt(self.distance_squared(other));
-    }
+pub const PointF = math.PointF;
 
-    pub fn dot(self: PointF, other: PointF) f32 {
-        return (self.x * other.x) + (self.y * other.y);
-    }
-
-    pub fn with_x(self: PointF, x: f32) PointF {
-        return .{ .x = x, .y = self.y };
-    }
-    pub fn with_y(self: PointF, y: f32) PointF {
-        return .{ .x = self.x, .y = y };
-    }
-
-    pub fn approach(self: PointF, speed_x: f32, speed_y: f32, target: PointF) PointF {
-        return .{ .x = types.approach(self.x, target.x, speed_x), .y = types.approach(self.y, target.y, speed_y) };
-    }
-
-    pub fn lerp(left: PointF, right: PointF, t: f32) PointF {
-        return .{ .x = types.lerp(left.x, right.x, t), .y = types.lerp(left.y, right.y, t) };
-    }
-
-    pub fn cross(self: PointF, other: PointF) f32 {
-        return (self.x * other.y) - (self.y * other.x);
-    }
-
-    pub fn trunc(self: PointF) PointF {
-        return .{ .x = @trunc(self.x), .y = @trunc(self.y) };
-    }
-    pub fn floor(self: PointF) PointF {
-        return .{ .x = @floor(self.x), .y = @floor(self.y) };
-    }
-
-    pub fn element_divide(self: PointF, other: PointF) PointF {
-        return .{ .x = self.x / other.x, .y = self.y / other.y };
-    }
-    pub fn element_times(self: PointF, other: PointF) PointF {
-        return .{ .x = self.x * other.x, .y = self.y * other.y };
-    }
-};
-
-pub fn approach(x: anytype, target: anytype, max_delta: anytype) @TypeOf(x, target, max_delta) {
-    return if (x < target) @min(x + max_delta, target) else @max(x - max_delta, target);
-}
-
-pub fn sine_in_out(t: f32) f32 {
-    return -(std.math.cos(std.math.pi * t) - 1) / 2;
-}
-pub fn lerp(min: f32, max: f32, t: f32) f32 {
-    return (1 - t) * min + t * max;
-}
+pub const approach = math.approach;
+pub const sine_in_out = math.sine_in_out;
+pub const lerp = math.lerp;
 
 pub fn abs(x: anytype) @TypeOf(x) {
     return x * std.math.sign(x);
@@ -332,3 +228,10 @@ pub fn angles_contain(a_target: f32, angle1: f32, angle2: f32) bool {
         return target >= a1 or target <= a2;
     }
 }
+
+// Digital input direction
+pub const DigitalDir = math.DigitalDir;
+pub const CardinalDir = math.CardinalDir;
+
+// don't @ me wikipedia told me so
+pub const PrincibleWind = math.PrincibleWind;

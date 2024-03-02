@@ -2,7 +2,7 @@ const GameState = @This();
 
 const GameObject = @import("GameObject.zig");
 const std = @import("std");
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const Level = @import("Level.zig");
 const Player = @import("Player.zig");
 const Screenwipe = @import("Screenwipe.zig");
@@ -138,7 +138,7 @@ pub fn loop(self: *GameState) void {
                 player.refill_dashes();
                 tic.sfx(-1, .{});
                 self.voice.play(null, .{});
-                r.load_level(self).load() catch unreachable;
+                Level.from_saved(&r, self).load() catch unreachable;
             } else {
                 // ???
                 if (player.state != .death) {

@@ -1,7 +1,7 @@
 const Crumble = @This();
 
 const tdraw = @import("draw.zig");
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const GameObject = @import("GameObject.zig");
 const GameState = @import("GameState.zig");
 const Player = @import("Player.zig");

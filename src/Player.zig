@@ -3,9 +3,10 @@ const Player = @This();
 const GameObject = @import("GameObject.zig");
 const GameState = @import("GameState.zig");
 const Input = @import("Input.zig");
-const tic80 = @import("tic80.zig");
+const tic80 = @import("common").tic;
 const std = @import("std");
 const Bullet = @import("Bullet.zig");
+const Shockwave = @import("Shockwave.zig");
 const tdraw = @import("draw.zig");
 const Audio = @import("Audio.zig");
 const Crumble = @import("Crumble.zig");
@@ -138,6 +139,22 @@ fn shoot_dir(self: *Player, x: i2, y: i2, ttl: i32) void {
         }
         return;
     };
+}
+fn make_shockwave(self: *Player, dir: types.CardinalDir) void {
+    // forbidden peer type resolution
+    const ds = switch (dir) {
+        .left, .right => .{ types.CardinalDir.up, types.CardinalDir.down },
+        .up, .down => .{ .left, .right },
+    };
+    const offset: types.Point = switch (dir) {
+        .down => .{},
+        .up => .{ .y = self.game_object.hit_y },
+        .left => .{ .x = self.game_object.hit_x },
+        .right => .{ .x = -(8 - self.game_object.hit_x - self.game_object.hit_w) },
+    };
+    inline for (0..2) |i| {
+        _ = Shockwave.create(self.allocator, self.game_object.game_state, self.game_object.x + offset.x, self.game_object.y + offset.y, self.input.player, ds[i], dir, 8) catch return;
+    }
 }
 fn raw_jump(self: *Player, play_sound: bool) bool {
     _ = self.input.consume_jump_press();
@@ -596,7 +613,11 @@ pub fn on_collide_x(self: *Player, moved: i32, target: i32) bool {
         },
         else => {},
     }
-    return GameObject.on_collide_x(&self.game_object, moved, target);
+    const res = GameObject.on_collide_x(&self.game_object, moved, target);
+    if (self.state == .dash) {
+        self.make_shockwave(if (target < 0) .left else .right);
+    }
+    return res;
 }
 
 pub fn on_collide_y(self: *Player, moved: i32, target: i32) bool {
@@ -614,9 +635,7 @@ pub fn on_collide_y(self: *Player, moved: i32, target: i32) bool {
     const res = GameObject.on_collide_y(&self.game_object, moved, target);
     // bonk!
     if (self.state == .dash) {
-        const shockwave_ttl = 5;
-        self.shoot_dir(-1, 0, shockwave_ttl);
-        self.shoot_dir(1, 0, shockwave_ttl);
+        self.make_shockwave(if (target < 0) .up else .down);
     }
     return res;
 }
@@ -678,8 +697,14 @@ pub fn draw(self: *Player) void {
         if (frame > 7) {
             frame = 7;
         }
-        tdraw.set1bpp();
-        self.game_object.game_state.draw_spr(1280 + (frame * 4), obj.x - 13, obj.y - 13, .{ .transparent = &.{0}, .w = 4, .h = 4 });
+        const e: f32 = @as(f32, @floatFromInt(frame)) / 7;
+        const x = obj.x - obj.game_state.camera_x;
+        const y = obj.y - obj.game_state.camera_y;
+        for (0..7) |i| {
+            const fi: f32 = @floatFromInt(i);
+            tic80.circ(x + @as(i32, @intFromFloat(std.math.cos((fi * std.math.tau) / 8.0) * 32 * e)), y + @as(i32, @intFromFloat(-std.math.sin((fi * std.math.tau) / 8.0) * 32 * e)), @intFromFloat((1 - e) * 8), 1);
+        }
+        // self.game_object.game_state.draw_spr(1280 + (frame * 4), obj.x - 13, obj.y - 13, .{ .transparent = &.{0}, .w = 4, .h = 4 });
         return;
     }
 

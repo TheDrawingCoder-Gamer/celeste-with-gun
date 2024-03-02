@@ -3,7 +3,7 @@ const SwitchDoor = @This();
 const GameObject = @import("GameObject.zig");
 const GameState = @import("GameState.zig");
 const std = @import("std");
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const Allocator = std.mem.Allocator;
 const types = @import("types.zig");
 const tdraw = @import("draw.zig");
@@ -17,8 +17,8 @@ const table: GameObject.VTable = .{
 };
 game_object: GameObject,
 kind: u8 = 0,
-width: u16,
-height: u16,
+width: u31,
+height: u31,
 target: types.Point,
 active: bool = false,
 t_progress: u8 = 0,
@@ -37,8 +37,8 @@ fn destroy(ctx: *anyopaque, allocator: Allocator) void {
 
 const DoorArgs = struct {
     kind: u8 = 0,
-    w: u16 = 1,
-    h: u16 = 1,
+    w: u31 = 1,
+    h: u31 = 1,
     target: types.Point,
 };
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, args: DoorArgs) !*SwitchDoor {

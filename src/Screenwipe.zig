@@ -1,6 +1,6 @@
 const Self = @This();
 
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const std = @import("std");
 const Player = @import("Player.zig");
 const GameState = @import("GameState.zig");

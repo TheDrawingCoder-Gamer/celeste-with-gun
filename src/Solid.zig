@@ -1,6 +1,6 @@
 const GameObject = @import("GameObject.zig");
 const std = @import("std");
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const PointF = @import("types.zig").PointF;
 
 pub fn move_to(self: GameObject.IsGameObject, x: i32, y: i32) void {

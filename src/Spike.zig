@@ -4,21 +4,18 @@ const GameObject = @import("GameObject.zig");
 const GameState = @import("GameState.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const tic = @import("tic80.zig");
+const tic = @import("common").tic;
 const tdraw = @import("draw.zig");
+const types = @import("types.zig");
 
 const vtable: GameObject.VTable = .{ .destroy = &destroy, .ptr_draw = &draw, .ptr_update = &GameObject.noUpdate, .get_object = &get_object };
-pub const Direction = enum(u2) {
-    up = 0,
-    right = 1,
-    down = 2,
-    left = 3,
-};
 
 game_object: GameObject,
-direction: Direction,
+direction: types.CardinalDir,
+length: u31,
+rotate: tic.Rotate,
 
-pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, dir: Direction) !*Spike {
+pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, dir: types.CardinalDir, length: u31) !*Spike {
     var obj = GameObject.create(state, x, y);
     obj.hit_x = switch (dir) {
         .down, .up, .right => 0,
@@ -30,12 +27,12 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, dir: Dire
         .up => 6,
     };
     obj.hit_w = switch (dir) {
-        .up, .down => 8,
+        .up, .down => 8 * length,
         .left, .right => 2,
     };
     obj.hit_h = switch (dir) {
         .up, .down => 2,
-        .left, .right => 8,
+        .left, .right => 8 * length,
     };
     obj.hazard = switch (dir) {
         .up => .up,
@@ -46,6 +43,12 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, dir: Dire
     const self = try allocator.create(Spike);
     self.direction = dir;
     self.game_object = obj;
+    self.rotate = switch (dir) {
+        .up => .no,
+        .right => .by90,
+        .down => .by180,
+        .left => .by270,
+    };
 
     const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
     state.objects.append(node);
@@ -64,5 +67,15 @@ fn destroy(self: *anyopaque, allocator: Allocator) void {
 
 fn draw(ctx: *anyopaque) void {
     const self: *Spike = @alignCast(@ptrCast(ctx));
-    self.game_object.game_state.draw_spr(290, self.game_object.x, self.game_object.y, .{ .rotate = @enumFromInt(@intFromEnum(self.direction)) });
+    var i: u31 = 0;
+    while (i < self.length) : (i += 1) {
+        switch (self.direction) {
+            .up, .down => {
+                self.game_object.game_state.draw_spr(290, self.game_object.x + i * 8, self.game_object.y, .{ .rotate = self.rotate });
+            },
+            .left, .right => {
+                self.game_object.game_state.draw_spr(290, self.game_object.x, self.game_object.y + i * 8, .{ .rotate = self.rotate });
+            },
+        }
+    }
 }
