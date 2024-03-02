@@ -2,4 +2,3 @@ zig-out
 zig-cache
 .local
 *.png
-!tilemap.png
