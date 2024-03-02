@@ -67,7 +67,6 @@ pub fn load(self: *Level) !void {
                 lowest_d = d;
             }
         }
-        tic.tracef("{any} {any}", .{ lowest, player_p });
         self.player_x = lowest.x;
         self.player_y = lowest.y;
     }
