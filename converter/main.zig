@@ -6,19 +6,18 @@ const json = std.json;
 const SavedLevel = @import("common").Level;
 const math = @import("common").math;
 
-var buf: [1024 * 40]u8 = undefined;
+var buf: [1024 * 55]u8 = undefined;
 var fba: std.heap.FixedBufferAllocator = undefined;
 var allocator: std.mem.Allocator = undefined;
 
 // WEEWOO! THIS IS REALLY BEEG!
-const file = @embedFile("map.ldtk");
+const file = @embedFile("map");
 
 const RawFieldInstance = struct { __identifier: []u8, __value: json.Value, __type: []u8 };
 const EntityInstance = struct { __identifier: []u8, __grid: [2]i32, fieldInstances: []RawFieldInstance, __worldX: i32, __worldY: i32, width: u31, height: u31 };
 const AutoLayerTile = struct { px: [2]u31, t: u32 };
-const LayerInstance = struct { __type: []u8, __identifier: []u8, entityInstances: []EntityInstance, autoLayerTiles: []AutoLayerTile };
-const Level = struct { worldX: i32, worldY: i32, pxWid: u31, pxHei: u31, fieldInstances: []RawFieldInstance, layerInstances: []LayerInstance };
-const World = struct { levels: []Level };
+const LayerInstance = struct { __type: []u8, __identifier: []u8, entityInstances: ?[]EntityInstance = null, autoLayerTiles: []AutoLayerTile };
+const Level = struct { worldX: i32, worldY: i32, pxWid: u31, pxHei: u31, cammode: u8, death_bottom: bool, layerInstances: []LayerInstance };
 
 const PointType = struct { cx: i32, cy: i32 };
 
@@ -29,43 +28,27 @@ export fn BOOT() void {
     fba = std.heap.FixedBufferAllocator.init(&buf);
     allocator = fba.allocator();
 
-    const world = json.parseFromSlice(World, allocator, file, .{ .ignore_unknown_fields = true, .allocate = .alloc_if_needed }) catch |err| {
-        tic.tracef("{any}", .{err});
-        tic.trace("sadge");
+    const da_levels = json.parseFromSlice([]Level, allocator, file, .{ .ignore_unknown_fields = true, .allocate = .alloc_if_needed }) catch |err| {
+        tic.tracef("{any} sadge", .{err});
         ouchie = true;
         return;
     };
-    defer world.deinit();
+    defer da_levels.deinit();
 
     levels = std.ArrayList(SavedLevel).init(allocator);
 
     @memset(tic.MAP, 0);
-    for (world.value.levels) |level| {
+    for (da_levels.value) |level| {
         const tile_x = @divFloor(level.worldX, 8);
         const tile_y = @divFloor(level.worldY, 8);
         const tile_w = @divFloor(level.pxWid, 8);
         const tile_h = @divFloor(level.pxHei, 8);
         const pix_x = level.worldX;
         const pix_y = level.worldY;
-        var cam_mode = SavedLevel.CamMode.locked;
-        var death_bottom = true;
+        const cam_mode: SavedLevel.CamMode = @enumFromInt(level.cammode);
+        const death_bottom = level.death_bottom;
         var entities = std.ArrayList(SavedLevel.Entity).init(allocator);
-        for (level.fieldInstances) |field| {
-            if (std.mem.eql(u8, field.__identifier, "CameraType")) {
-                const v = field.__value.string;
-                if (std.mem.eql(u8, v, "Locked")) {
-                    cam_mode = .locked;
-                } else if (std.mem.eql(u8, v, "FollowX")) {
-                    cam_mode = .follow_x;
-                } else if (std.mem.eql(u8, v, "FollowY")) {
-                    cam_mode = .follow_y;
-                } else if (std.mem.eql(u8, v, "FreeFollow")) {
-                    cam_mode = .free_follow;
-                }
-            } else if (std.mem.eql(u8, field.__identifier, "DeathBottom")) {
-                death_bottom = field.__value.bool;
-            }
-        }
+
         // freeing? what's that?
         // defer entities.deinit();
         for (level.layerInstances) |layer| {
@@ -109,7 +92,7 @@ export fn BOOT() void {
                     tic.mset(tile_x + tx, tile_y + ty, da_tile);
                 }
             } else if (std.mem.eql(u8, layer.__identifier, "Entities")) {
-                for (layer.entityInstances) |entity| {
+                for (layer.entityInstances.?) |entity| {
                     const ex = entity.__worldX;
                     const ey = entity.__worldY;
                     const ew = entity.width;
@@ -197,6 +180,14 @@ export fn BOOT() void {
                             }
                         }
                         kind = .{ .spike = .{ .direction = dir } };
+                    } else if (std.mem.eql(u8, entity.__identifier, "DashCrystal")) {
+                        var dashes: u8 = 1;
+                        for (entity.fieldInstances) |field| {
+                            if (std.mem.eql(u8, field.__identifier, "Dashes")) {
+                                dashes = @intCast(field.__value.integer);
+                            }
+                        }
+                        kind = .{ .dash_crystal = dashes };
                     }
 
                     if (kind) |k| {

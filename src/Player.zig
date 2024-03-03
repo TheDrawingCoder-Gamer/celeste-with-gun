@@ -766,7 +766,7 @@ fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
     if (self.t_platform_velocity_storage == 0 or value.y <= self.platform_velocity.y or types.abs(value.x) > types.abs(self.platform_velocity.x) or
         (std.math.sign(value.x) != std.math.sign(self.platform_velocity.x)))
     {
-        self.t_platform_velocity_storage = 10;
+        self.t_platform_velocity_storage = 50;
         self.platform_velocity = value;
     }
 }
@@ -794,5 +794,7 @@ pub fn as_table(self: *Player) GameObject.IsGameObject {
 }
 
 pub inline fn refill_dashes(self: *Player) void {
-    self.dashes = self.max_dashes;
+    if (self.dashes < self.max_dashes) {
+        self.dashes = self.max_dashes;
+    }
 }

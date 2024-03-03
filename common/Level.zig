@@ -1,7 +1,7 @@
 const Level = @This();
 const math = @import("math.zig");
 
-pub const CamMode = enum { locked, follow_x, follow_y, free_follow };
+pub const CamMode = enum(u8) { locked, follow_x, follow_y, free_follow };
 pub const Entity = struct {
     pub const Kind = union(enum) {
         const Switch = struct { kind: u8, shootable: bool, touchable: bool };
@@ -16,6 +16,7 @@ pub const Entity = struct {
         crumble: void,
         player_start: bool,
         spike: Spike,
+        dash_crystal: u8,
     };
     x: i32,
     y: i32,

@@ -50,12 +50,27 @@ pub fn move_by_with_speed(self: GameObject.IsGameObject, delta: PointF, speed: P
                         _ = actor.move_x(@floatFromInt(move_x), null);
                     }
                 }
-                if (up or down) {
+                if (up) {
+                    // Prioritize riding as it is hard to detect
+                    // use move_x move_y to prevent sadness
+                    if (was_riding) {
+                        _ = actor.move_y(@floatFromInt(move_y), null);
+                    } else if (obj.overlaps(actor, 0, move_y)) {
+                        // Push
+                        const their_hitbox = actor.obj().world_hitbox();
+                        const movement = our_hitbox.y - their_hitbox.bottom() - 1;
+                        if (actor.move_y(@floatFromInt(movement), null)) {
+                            actor.squish();
+                        }
+                    }
+                }
+                if (down) {
+                    // Prioritize riding as it
                     // use move_x move_y to prevent sadness
                     if (obj.overlaps(actor, 0, move_y)) {
                         // Push
                         const their_hitbox = actor.obj().world_hitbox();
-                        const movement = if (up) our_hitbox.y - their_hitbox.bottom() - 1 else our_hitbox.bottom() - their_hitbox.y;
+                        const movement = our_hitbox.bottom() - their_hitbox.y;
                         if (actor.move_y(@floatFromInt(movement), null)) {
                             actor.squish();
                         }

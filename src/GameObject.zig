@@ -300,6 +300,17 @@ pub fn yesCanTouch(ctx: *anyopaque, player: *Player) bool {
     _ = player;
     return true;
 }
+
+pub fn generic_object(comptime T: type) type {
+    return struct {
+        pub fn get_object(self: *T) *GameObject {
+            return &self.game_object;
+        }
+        pub fn destroy(self: *T, alloc: Allocator) void {
+            alloc.destroy(self);
+        }
+    };
+}
 pub const noDraw = noUpdate;
 pub const noShot = noUpdate;
 pub fn debug_draw_hitbox(self: *GameObject) void {

@@ -13,6 +13,7 @@ const Checkpoint = @import("Checkpoint.zig");
 const Switch = @import("Switch.zig");
 const SwitchDoor = @import("SwitchDoor.zig");
 const TrafficBlock = @import("TrafficBlock.zig");
+const DashCrystal = @import("DashCrystal.zig");
 
 height: i32,
 width: i32,
@@ -110,6 +111,9 @@ pub fn init(self: *Level) !void {
             },
             .spike => |s| {
                 _ = try Spike.create(self.state.allocator, self.state, entity.x, entity.y, s.direction, @divFloor(@max(entity.w, entity.h), 8));
+            },
+            .dash_crystal => |c| {
+                _ = try DashCrystal.create(self.state, entity.x, entity.y, c);
             },
         }
     }
