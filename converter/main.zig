@@ -13,190 +13,19 @@ var allocator: std.mem.Allocator = undefined;
 // WEEWOO! THIS IS REALLY BEEG!
 const file = @embedFile("map");
 
-const RawFieldInstance = struct { __identifier: []u8, __value: json.Value, __type: []u8 };
-const EntityInstance = struct { __identifier: []u8, __grid: [2]i32, fieldInstances: []RawFieldInstance, __worldX: i32, __worldY: i32, width: u31, height: u31 };
-const AutoLayerTile = struct { px: [2]u31, t: u32 };
-const LayerInstance = struct { __type: []u8, __identifier: []u8, entityInstances: ?[]EntityInstance = null, autoLayerTiles: []AutoLayerTile };
-const Level = struct { worldX: i32, worldY: i32, pxWid: u31, pxHei: u31, cammode: u8, death_bottom: bool, layerInstances: []LayerInstance };
-
-const PointType = struct { cx: i32, cy: i32 };
-
 var t: u32 = 0;
-var levels: std.ArrayList(SavedLevel) = undefined;
+var levels: []SavedLevel = undefined;
 var ouchie = false;
 export fn BOOT() void {
     fba = std.heap.FixedBufferAllocator.init(&buf);
     allocator = fba.allocator();
 
-    const da_levels = json.parseFromSlice([]Level, allocator, file, .{ .ignore_unknown_fields = true, .allocate = .alloc_if_needed }) catch |err| {
-        tic.tracef("{any} sadge", .{err});
-        ouchie = true;
-        return;
-    };
-    defer da_levels.deinit();
-
-    levels = std.ArrayList(SavedLevel).init(allocator);
-
+    var fbs = std.io.fixedBufferStream(file);
+    const data = s2s.deserializeAlloc(fbs.reader(), SavedLevel.CompressedMap, allocator) catch unreachable;
+    levels = data.levels;
     @memset(tic.MAP, 0);
-    for (da_levels.value) |level| {
-        const tile_x = @divFloor(level.worldX, 8);
-        const tile_y = @divFloor(level.worldY, 8);
-        const tile_w = @divFloor(level.pxWid, 8);
-        const tile_h = @divFloor(level.pxHei, 8);
-        const pix_x = level.worldX;
-        const pix_y = level.worldY;
-        const cam_mode: SavedLevel.CamMode = @enumFromInt(level.cammode);
-        const death_bottom = level.death_bottom;
-        var entities = std.ArrayList(SavedLevel.Entity).init(allocator);
-
-        // freeing? what's that?
-        // defer entities.deinit();
-        for (level.layerInstances) |layer| {
-            if (std.mem.eql(u8, layer.__identifier, "TileMap")) {
-                // yippee!
-                for (layer.autoLayerTiles) |tile| {
-                    const tx = @divFloor(tile.px[0], 8);
-                    const ty = @divFloor(tile.px[1], 8);
-                    const da_tile: u32 = switch (tile.t) {
-                        0 => 39,
-                        1 => 40,
-                        2 => 41,
-                        3 => 42,
-                        4 => 43,
-                        5 => 44,
-                        6 => 45,
-                        7 => 55,
-                        8 => 56,
-                        9 => 57,
-                        10 => 58,
-                        11 => 59,
-                        12 => 60,
-                        13 => 61,
-                        14 => 71,
-                        15 => 72,
-                        16 => 73,
-                        17 => 74,
-                        18 => 75,
-                        19 => 76,
-                        20 => 77,
-                        21 => 87,
-                        22 => 88,
-                        23 => 89,
-                        24 => 90,
-                        else => {
-                            ouchie = true;
-                            tic.trace("not a real tile!");
-                            return;
-                        },
-                    };
-                    tic.mset(tile_x + tx, tile_y + ty, da_tile);
-                }
-            } else if (std.mem.eql(u8, layer.__identifier, "Entities")) {
-                for (layer.entityInstances.?) |entity| {
-                    const ex = entity.__worldX;
-                    const ey = entity.__worldY;
-                    const ew = entity.width;
-                    const eh = entity.height;
-                    var kind: ?SavedLevel.Entity.Kind = null;
-                    if (std.mem.eql(u8, entity.__identifier, "Crumble")) {
-                        kind = .crumble;
-                    } else if (std.mem.eql(u8, entity.__identifier, "PlayerStart")) {
-                        var world_start = false;
-                        for (entity.fieldInstances) |field| {
-                            if (std.mem.eql(u8, field.__identifier, "WorldStart")) {
-                                world_start = field.__value.bool;
-                                break;
-                            }
-                        }
-                        kind = .{ .player_start = world_start };
-                    } else if (std.mem.eql(u8, entity.__identifier, "Destructible")) {
-                        var shoot_only = false;
-                        for (entity.fieldInstances) |field| {
-                            if (std.mem.eql(u8, field.__identifier, "shoot_only")) {
-                                shoot_only = field.__value.bool;
-                                break;
-                            }
-                        }
-                        kind = .{ .destructible = .{ .shoot_only = shoot_only } };
-                    } else if (std.mem.eql(u8, entity.__identifier, "Switch")) {
-                        var can_shoot = false;
-                        var can_touch = true;
-                        var s_kind: u8 = 0;
-                        for (entity.fieldInstances) |field| {
-                            if (std.mem.eql(u8, field.__identifier, "kind")) {
-                                s_kind = @intFromFloat(field.__value.float);
-                            } else if (std.mem.eql(u8, field.__identifier, "can_shoot")) {
-                                can_shoot = field.__value.bool;
-                            } else if (std.mem.eql(u8, field.__identifier, "can_touch")) {
-                                can_touch = field.__value.bool;
-                            }
-                        }
-                        kind = .{ .switch_coin = .{ .kind = s_kind, .shootable = can_shoot, .touchable = can_touch } };
-                    } else if (std.mem.eql(u8, entity.__identifier, "SwitchDoor")) {
-                        var s_kind: u8 = 0;
-                        var target: PointType = .{ .cx = 0, .cy = 0 };
-                        for (entity.fieldInstances) |field| {
-                            if (std.mem.eql(u8, field.__identifier, "kind")) {
-                                s_kind = @intFromFloat(field.__value.float);
-                            } else if (std.mem.eql(u8, field.__identifier, "target")) {
-                                const res = json.parseFromValue(PointType, allocator, field.__value, .{}) catch {
-                                    ouchie = true;
-                                    tic.trace("no!");
-                                    continue;
-                                };
-                                defer res.deinit();
-                                target = res.value;
-                            }
-                        }
-                        kind = .{ .switch_door = .{ .kind = s_kind, .target = .{ .x = pix_x + target.cx * 8, .y = pix_y + target.cy * 8 } } };
-                    } else if (std.mem.eql(u8, entity.__identifier, "TrafficBlock")) {
-                        var target: PointType = .{ .cx = 0, .cy = 0 };
-                        for (entity.fieldInstances) |field| {
-                            if (std.mem.eql(u8, field.__identifier, "target")) {
-                                const res = json.parseFromValue(PointType, allocator, field.__value, .{}) catch {
-                                    ouchie = true;
-                                    tic.trace("no!");
-                                    continue;
-                                };
-                                defer res.deinit();
-                                target = res.value;
-                            }
-                        }
-                        kind = .{ .traffic_block = .{ .target = .{ .x = pix_x + target.cx * 8, .y = pix_y + target.cy * 8 } } };
-                    } else if (std.mem.eql(u8, entity.__identifier, "Spike")) {
-                        var dir: math.CardinalDir = .up;
-                        for (entity.fieldInstances) |field| {
-                            if (std.mem.eql(u8, field.__identifier, "Direction")) {
-                                const v = field.__value.string;
-                                if (std.mem.eql(u8, v, "Left")) {
-                                    dir = .left;
-                                } else if (std.mem.eql(u8, v, "Up")) {
-                                    dir = .up;
-                                } else if (std.mem.eql(u8, v, "Right")) {
-                                    dir = .right;
-                                } else if (std.mem.eql(u8, v, "Down")) {
-                                    dir = .down;
-                                }
-                            }
-                        }
-                        kind = .{ .spike = .{ .direction = dir } };
-                    } else if (std.mem.eql(u8, entity.__identifier, "DashCrystal")) {
-                        var dashes: u8 = 1;
-                        for (entity.fieldInstances) |field| {
-                            if (std.mem.eql(u8, field.__identifier, "Dashes")) {
-                                dashes = @intCast(field.__value.integer);
-                            }
-                        }
-                        kind = .{ .dash_crystal = dashes };
-                    }
-
-                    if (kind) |k| {
-                        entities.append(.{ .x = ex, .y = ey, .w = ew, .h = eh, .kind = k }) catch unreachable;
-                    }
-                }
-            }
-        }
-        levels.append(.{ .x = tile_x, .y = tile_y, .width = tile_w, .height = tile_h, .entities = entities.items, .cam_mode = cam_mode, .death_bottom = death_bottom }) catch unreachable;
+    for (data.tiles) |tile| {
+        tic.mset(tile.pos.x, tile.pos.y, tile.tile);
     }
 }
 
@@ -208,7 +37,7 @@ export fn TIC() void {
             if (!ouchie) {
                 @memset(tic.MAP, 0);
                 var stream = std.io.fixedBufferStream(tic.MAP);
-                s2s.serialize(stream.writer(), []SavedLevel, levels.items) catch |err| {
+                s2s.serialize(stream.writer(), []SavedLevel, levels) catch |err| {
                     tic.tracef("{any}", .{err});
                 };
                 tic.sync(.{ .bank = 7, .sections = .{ .map = true }, .toCartridge = true });

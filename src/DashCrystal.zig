@@ -41,6 +41,8 @@ fn dash_crystal_palette(dashes: u8) void {
     const dash_pal: struct { u4, u4 } = switch (dashes) {
         1 => .{ 1, 2 },
         2 => .{ 6, 5 },
+        3 => .{ 13, 14 },
+        4 => .{ 4, 3 },
         else => .{ 2, 3 },
     };
     tic.PALETTE_MAP.color1 = 12;
@@ -51,6 +53,8 @@ fn dash_sprite(exists: bool, dashes: u8) i32 {
     const res: struct { i32, i32 } = switch (dashes) {
         1 => .{ 805, 806 },
         2 => .{ 807, 808 },
+        3 => .{ 809, 810 },
+        4 => .{ 811, 812 },
         else => .{ 773, 774 },
     };
     return if (exists) res[0] else res[1];

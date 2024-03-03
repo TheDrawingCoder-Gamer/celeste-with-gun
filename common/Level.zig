@@ -1,12 +1,14 @@
 const Level = @This();
 const math = @import("math.zig");
 
+pub const Tile = struct { pos: math.Point, tile: u16 };
+pub const CompressedMap = struct { levels: []Level, tiles: []Tile };
 pub const CamMode = enum(u8) { locked, follow_x, follow_y, free_follow };
 pub const Entity = struct {
     pub const Kind = union(enum) {
         const Switch = struct { kind: u8, shootable: bool, touchable: bool };
         const Door = struct { kind: u8, target: math.Point };
-        const Traffic = struct { target: math.Point };
+        const Traffic = struct { target: math.Point, speed: f32 };
         const Destructible = struct { shoot_only: bool };
         const Spike = struct { direction: math.CardinalDir };
         switch_coin: Switch,
