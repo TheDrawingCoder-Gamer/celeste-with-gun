@@ -19,7 +19,7 @@ pub fn Parser(comptime Value: type, comptime Reader: type) type {
 pub fn Literal(comptime Reader: type) type {
     return struct {
         parser: Parser([]u8, Reader) = .{
-            ._parse = parse,
+            ._parse = &parse,
         },
         want: []const u8,
 
@@ -48,7 +48,7 @@ pub fn Literal(comptime Reader: type) type {
 pub fn Voided(comptime Value: type, comptime Reader: type) type {
     return struct {
         parser: Parser(void, Reader) = .{
-            ._parse = parse,
+            ._parse = &parse,
         },
         child_parser: *Parser(Value, Reader),
 
@@ -70,7 +70,7 @@ pub fn Voided(comptime Value: type, comptime Reader: type) type {
 pub fn OneOf(comptime Value: type, comptime Reader: type) type {
     return struct {
         parser: Parser(Value, Reader) = .{
-            ._parse = parse,
+            ._parse = &parse,
         },
         parsers: []*Parser(Value, Reader),
 
@@ -107,7 +107,7 @@ pub fn Sequence(comptime Tuple: type, comptime Reader: type) type {
     const ParserTuple = @Type(.{ .Struct = .{ .is_tuple = true, .fields = &new_fields, .decls = &.{}, .layout = .Auto } });
     return struct {
         parser: Parser(Tuple, Reader) = .{
-            ._parse = parse,
+            ._parse = &parse,
         },
         parsers: ParserTuple,
 
@@ -135,7 +135,7 @@ pub fn Sequence(comptime Tuple: type, comptime Reader: type) type {
 
 pub fn AnyChar(comptime Reader: type) type {
     return struct {
-        parser: Parser(u8, Reader) = .{ ._parse = parse },
+        parser: Parser(u8, Reader) = .{ ._parse = &parse },
 
         const Self = @This();
 
@@ -154,7 +154,7 @@ pub fn AnyChar(comptime Reader: type) type {
 
 pub fn ManyTill(comptime ManyVal: type, comptime TillVal: type, comptime Reader: type) type {
     return struct {
-        parser: Parser([]ManyVal, Reader) = .{ ._parse = parse },
+        parser: Parser([]ManyVal, Reader) = .{ ._parse = &parse },
         many_of: *Parser(ManyVal, Reader),
         til: *Parser(TillVal, Reader),
 
@@ -187,25 +187,43 @@ pub fn strip_maps(alloc: Allocator, input: []const u8) ![]u8 {
     var fbs = std.io.fixedBufferStream(input);
     const FbaType = @TypeOf(fbs);
     const ManyCharTillVoid = ManyTill(u8, []u8, FbaType);
-    var anychar = AnyChar(FbaType).init().parser;
+    var anychar = AnyChar(FbaType).init();
     var map_lit = Literal(FbaType).init("-- <MAP>");
     var map_end_lit = Literal(FbaType).init("-- </MAP>");
     var map7_lit = Literal(FbaType).init("-- <MAP7>");
     var map7_end_lit = Literal(FbaType).init("-- </MAP7>");
-    var many_til_map = ManyCharTillVoid.init(&anychar, &map_lit.parser).parser;
-    var skip_map_end = ManyCharTillVoid.init(&anychar, &map_end_lit.parser).parser;
-    _ = &skip_map_end;
-    var many_til_map7 = ManyCharTillVoid.init(&anychar, &map7_lit.parser).parser;
-    _ = &many_til_map7;
-    var skip_map7_end = ManyCharTillVoid.init(&anychar, &map7_end_lit.parser).parser;
-    _ = &skip_map7_end;
+    var many_til_map = ManyCharTillVoid.init(&anychar.parser, &map_lit.parser);
+    var skip_map_end = ManyCharTillVoid.init(&anychar.parser, &map_end_lit.parser);
+    var many_til_map7 = ManyCharTillVoid.init(&anychar.parser, &map7_lit.parser);
+    var skip_map7_end = ManyCharTillVoid.init(&anychar.parser, &map7_end_lit.parser);
 
-    // var final = Sequence(struct { []u8, []u8, []u8, []u8 }, FbaType).init(.{ &many_til_map, &skip_map_end, &many_til_map7, &skip_map7_end });
+    var final = Sequence(struct { []u8, []u8, []u8, []u8 }, FbaType).init(.{ &many_til_map.parser, &skip_map_end.parser, &many_til_map7.parser, &skip_map7_end.parser });
 
-    // const res = (try final.parser.parse(alloc, &fbs)) orelse return error.BadParse;
-    const res = try many_til_map.parse(alloc, &fbs) orelse return error.BadParse;
-    // const rest = try fbs.reader().readAllAlloc(alloc, 65565);
-    // const out = try std.mem.join(alloc, "", &.{ res[0], res[2] });
+    const res = (try final.parser.parse(alloc, &fbs)) orelse return error.BadParse;
+    const rest = try fbs.reader().readAllAlloc(alloc, 65565);
+    const out = try std.mem.join(alloc, "", &.{ res[0], res[2], rest });
 
-    return res;
+    return out;
+}
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const alloc = gpa.allocator();
+    var args = try std.process.argsWithAllocator(alloc);
+    if (!args.skip())
+        return error.TooFewArgs;
+    const inpath = args.next() orelse return error.TooFewArgs;
+    const outpath = args.next() orelse return error.TooFewArgs;
+
+    const infile = try std.fs.openFileAbsolute(inpath, .{});
+    defer infile.close();
+    const data = try infile.readToEndAlloc(alloc, 65565);
+
+    //    std.debug.print("????\n", .{});
+    const res = try strip_maps(alloc, data);
+    //    std.debug.print("{s}", .{res});
+    const outfile = try std.fs.createFileAbsolute(outpath, .{});
+    defer outfile.close();
+
+    try outfile.writeAll(res);
 }

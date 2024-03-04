@@ -65,5 +65,5 @@ fn draw(self: *DashCrystal) void {
     dash_crystal_palette(self.dashes);
     defer tdraw.reset_pallete();
     const id: i32 = dash_sprite(self.use_timer == 0, self.dashes);
-    self.game_object.game_state.draw_spr(id, self.game_object.x, self.game_object.y, .{});
+    self.game_object.game_state.draw_spr(id, self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
 }
