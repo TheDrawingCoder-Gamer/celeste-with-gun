@@ -5,24 +5,7 @@ const SavedLevel = @import("common/Level.zig");
 const math = @import("common/math.zig");
 const s2s = @import("vendor/s2s/s2s.zig");
 
-var buf: [1024 * 1024 * 64]u8 = undefined;
-const GPA = std.heap.GeneralPurposeAllocator(.{});
-// var gpa: GPA = undefined;
-var fba: std.heap.FixedBufferAllocator = undefined;
-var alloc: std.mem.Allocator = undefined;
-
-const RawFieldInstance = struct { __identifier: []u8, __value: json.Value, __type: []u8 };
-const EntityInstance = struct { __identifier: []u8, __grid: [2]i32, fieldInstances: []RawFieldInstance, __worldX: i32, __worldY: i32, width: u31, height: u31 };
-const AutoLayerTile = struct { px: [2]u31, t: u32 };
-const LayerInstance = struct { __type: []u8, __identifier: []u8, entityInstances: []EntityInstance, autoLayerTiles: []AutoLayerTile };
-const Level = struct { worldX: i32, worldY: i32, pxWid: u31, pxHei: u31, cammode: u8, death_bottom: bool, layerInstances: []LayerInstance };
-
-const PointType = struct { cx: i32, cy: i32 };
-
 pub fn build(b: *std.Build) !void {
-    fba = std.heap.FixedBufferAllocator.init(&buf);
-    alloc = fba.allocator();
-
     const optimize = std.builtin.OptimizeMode.ReleaseSmall;
     const optimize_native = std.builtin.OptimizeMode.Debug;
     const buddy2_mod = b.addModule("buddy2", .{ .root_source_file = .{ .path = "vendor/zig-buddy2/src/buddy2.zig" } });
