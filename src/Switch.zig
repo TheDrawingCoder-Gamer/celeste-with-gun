@@ -12,6 +12,8 @@ const tdraw = @import("draw.zig");
 game_object: GameObject,
 active: bool = false,
 kind: u8 = 0,
+w: u31,
+h: u31,
 
 const vtable: GameObject.VTable = .{ .destroy = &destroy, .get_object = &get_object, .touch = &touch, .can_touch = &can_touch, .shot = &shot, .ptr_draw = &draw };
 const CreateArgs = struct {
@@ -19,20 +21,18 @@ const CreateArgs = struct {
     is_gun: bool = true,
     is_touch: bool = false,
 };
-pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, args: CreateArgs) !*Switch {
+pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, w: u31, h: u31, args: CreateArgs) !*Switch {
     var obj = GameObject.create(state, x, y);
     obj.special_type = .sheild_toggle;
     obj.shootable = args.is_gun;
     obj.touchable = args.is_touch;
-    obj.hit_x = -4;
-    obj.hit_y = -4;
-    obj.hit_w = 12;
-    obj.hit_h = 12;
+    obj.hit_x = -2;
+    obj.hit_y = -2;
+    obj.hit_w = w + 2;
+    obj.hit_h = h + 2;
 
     const self = try allocator.create(Switch);
-    self.game_object = obj;
-    self.active = false;
-    self.kind = args.kind;
+    self.* = .{ .game_object = obj, .active = false, .kind = args.kind, .w = w, .h = h };
 
     const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
     state.objects.append(node);
@@ -106,23 +106,23 @@ fn shot(ctx: *anyopaque) void {
 
 fn draw(ctx: *anyopaque) void {
     const self: *Switch = @alignCast(@ptrCast(ctx));
-
+    const x = self.game_object.x - self.game_object.game_state.camera_x;
+    const y = self.game_object.y - self.game_object.game_state.camera_y;
+    const hw = self.w / 2;
+    const hh = self.h / 2;
+    tic.ellib(x + hw, y + hh, hw, hh, if (self.active) 2 else 10);
     defer tdraw.set4bpp();
     defer tdraw.reset_pallete();
     tdraw.set1bpp();
     tic.PALETTE_MAP.color1 = 15;
-    self.game_object.game_state.draw_spr(1539, self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
 
     if (self.game_object.touchable) {
         tic.PALETTE_MAP.color1 = if (self.active) 2 else 10;
-        self.game_object.game_state.draw_spr(1540, self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
+        self.game_object.game_state.draw_spr(1540, self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{ .transparent = &.{0} });
     }
 
     if (self.game_object.shootable) {
         tic.PALETTE_MAP.color1 = if (self.active) 1 else 2;
-        self.game_object.game_state.draw_spr(1542, self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
+        self.game_object.game_state.draw_spr(1542, self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{ .transparent = &.{0} });
     }
-
-    tic.PALETTE_MAP.color1 = if (self.active) 2 else 10;
-    self.game_object.game_state.draw_spr(1543, self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
 }

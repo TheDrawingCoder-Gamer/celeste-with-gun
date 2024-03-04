@@ -19,6 +19,7 @@ pub const Entity = struct {
         player_start: bool,
         spike: Spike,
         dash_crystal: u8,
+        checkpoint: void,
     };
     x: i32,
     y: i32,

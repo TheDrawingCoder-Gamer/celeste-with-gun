@@ -251,6 +251,8 @@ fn process_entity(world_pos: math.Point, o_entities: *std.ArrayList(SavedLevel.E
             }
         }
         kind = .{ .dash_crystal = dashes };
+    } else if (std.mem.eql(u8, entity.__identifier, "Checkpoint")) {
+        kind = .checkpoint;
     }
 
     if (kind) |k| {

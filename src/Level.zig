@@ -85,7 +85,7 @@ pub fn init(self: *Level) !void {
     for (self.entities) |entity| {
         switch (entity.kind) {
             .switch_coin => |block| {
-                _ = try Switch.create(self.state.allocator, self.state, entity.x, entity.y, .{ .is_gun = block.shootable, .is_touch = block.touchable, .kind = block.kind });
+                _ = try Switch.create(self.state.allocator, self.state, entity.x, entity.y, entity.w, entity.h, .{ .is_gun = block.shootable, .is_touch = block.touchable, .kind = block.kind });
             },
             .switch_door => |door| {
                 _ = try SwitchDoor.create(self.state.allocator, self.state, entity.x, entity.y, .{ .kind = door.kind, .w = @divFloor(entity.w, 8), .h = @divFloor(entity.h, 8), .target = door.target });
@@ -114,6 +114,9 @@ pub fn init(self: *Level) !void {
             },
             .dash_crystal => |c| {
                 _ = try DashCrystal.create(self.state, entity.x, entity.y, c);
+            },
+            .checkpoint => {
+                _ = try Checkpoint.create(self.state.allocator, self.state, @divFloor(entity.x, 8), @divFloor(entity.y, 8));
             },
         }
     }

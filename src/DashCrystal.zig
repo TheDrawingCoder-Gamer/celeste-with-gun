@@ -32,7 +32,12 @@ fn update(self: *DashCrystal) void {
 }
 
 fn touch(self: *DashCrystal, player: *Player) void {
-    if (self.use_timer == 0 and player.dashes < self.dashes) {
+    if (self.use_timer != 0) return;
+    if (self.dashes == 1) {
+        player.refill_dashes();
+        return;
+    }
+    if (player.dashes < self.dashes) {
         self.use_timer = 120;
         player.dashes = self.dashes;
     }

@@ -26,6 +26,7 @@ fn as_rider(ctx: *anyopaque) GameObject.IRide {
 
 const MAX_FALL_SPEED = 2;
 const MAX_FAST_FALL_SPEED = 2.6;
+const MAX_MIDAIR_SHOT = 3;
 state: State = .normal,
 t_var_jump: u32 = 0,
 t_jump_grace: u8 = 0,
@@ -60,6 +61,8 @@ char_sliding: bool = false,
 last_accel: types.PointF = .{},
 follow_thru_accel: types.PointF = .{},
 t_accel_follow_thru: u8 = 0,
+// Amount of shots that effect momentum midair
+midair_shot_count: u8 = MAX_MIDAIR_SHOT,
 
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !*Player {
     var obj = GameObject.create(state, x, y);
@@ -96,17 +99,49 @@ fn approach(x: f32, target: f32, max_delta: f32) f32 {
 }
 fn shoot(self: *Player) void {
     _ = self.input.consume_gun_press();
-    self.shoot_raw();
+    self.shoot_raw(.against);
 }
 fn dash_shoot(self: *Player) void {
     _ = self.input.consume_action_press();
-    self.shoot_raw();
+    self.shoot_raw(.with);
 }
-fn shoot_raw(self: *Player) void {
+fn jump_shoot(self: *Player) void {
+    _ = self.input.consume_jump_press();
+    self.shoot_raw(.none);
+}
+
+const RecoilMode = enum { none, against, with };
+fn shoot_raw(self: *Player, recoil: RecoilMode) void {
     const x_dir = if (self.input.input_y == 0 and self.input.input_x == 0) self.game_object.facing else self.input.input_x;
     self.shoot_dir(x_dir, self.input.input_y, -1);
 
     tic80.sfx(3, .{ .duration = 10, .volume = 5 });
+
+    if (recoil == .none) return;
+    if (self.game_object.check_solid(0, 1)) return;
+    switch (recoil) {
+        .none => unreachable,
+        .with => self.add_shot_momentum(-x_dir, -self.input.input_y),
+        .against => self.add_shot_momentum(x_dir, self.input.input_y),
+    }
+}
+
+fn add_shot_momentum(self: *Player, x: i2, y: i2) void {
+    if (self.midair_shot_count == 0) return;
+    self.midair_shot_count -= 1;
+    const da_y = if (y < 0) 0 else -y;
+    const da_x = -x;
+
+    const y_off: f32 = @as(f32, @floatFromInt(da_y)) * 5;
+    const x_off: f32 = @as(f32, @floatFromInt(da_x)) * 0.2;
+    if (self.game_object.speed_y >= 0) {
+        self.game_object.speed_y = y_off;
+    } else {
+        self.game_object.speed_y += y_off;
+    }
+
+    // Ignore direction to not completely break ggoing FASAT!
+    self.game_object.speed_x += x_off;
 }
 fn shoot_dir(self: *Player, x: i2, y: i2, ttl: i32) void {
     const dir: Bullet.Direction = blk: {
@@ -262,7 +297,11 @@ fn dash(self: *Player) void {
         4 * @as(f32, @floatFromInt(x_dir));
     self.game_object.speed_x = x_speed;
     self.game_object.speed_y = @as(f32, @floatFromInt(self.input.input_y)) * 4;
-    self.shoot_dir(x_dir, self.input.input_y, 30);
+
+    if (self.input.input_y < 0) {
+        self.t_jump_grace = 0;
+    }
+    self.shoot_dir(x_dir, self.input.input_y, 20);
     self.t_dash_time = 8;
     self.voice.play(4, .{ .volume = 5 });
 }
@@ -324,7 +363,19 @@ pub fn update(self: *Player) void {
 
             var target: f32 = 0;
             var accel: f32 = 0.2;
-            if (std.math.sign(self.game_object.speed_x) * self.game_object.speed_x > 2 and self.input.input_x == @as(i2, @intFromFloat(std.math.sign(self.game_object.speed_x)))) {
+            // if input locked, ignore
+            if (self.input.input_lock_held) {
+                if (on_ground) {
+                    if (self.crouching) {
+                        accel = 0.25;
+                    } else {
+                        accel = 0.4;
+                    }
+                } else {
+                    // reduce air friction while locked in
+                    accel = 0.05;
+                }
+            } else if (std.math.sign(self.game_object.speed_x) * self.game_object.speed_x > 2 and self.input.input_x == @as(i2, @intFromFloat(std.math.sign(self.game_object.speed_x)))) {
                 target = 1;
                 accel = 0.05;
             } else if (on_ground) {
@@ -380,11 +431,14 @@ pub fn update(self: *Player) void {
                     self.jump();
                 } else if (sliding) {
                     self.wall_jump(-self.input.input_x);
+                } else if (self.t_shoot_cooldown == 0) {
+                    self.jump_shoot();
                 }
             }
             if (self.input.input_gun_pressed > 0) {
-                if (self.t_shoot_cooldown == 0)
+                if (self.t_shoot_cooldown == 0) {
                     self.shoot();
+                }
             }
             if (self.input.input_action_pressed > 0) {
                 switch (self.mode) {
@@ -442,10 +496,8 @@ pub fn update(self: *Player) void {
         },
     }
 
-    // apply
-    const gravity_multiplier: f32 = if (self.t_fire_pose > 0 and self.game_object.speed_y > 0) 0.2 else 1;
     // hack
-    _ = vtable.move_y(self, self.game_object.speed_y * gravity_multiplier, @ptrCast(&on_collide_y));
+    _ = vtable.move_y(self, self.game_object.speed_y, @ptrCast(&on_collide_y));
     _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
 
     // sprite
@@ -782,7 +834,7 @@ fn riding_platform_set_velocity(ctx: *anyopaque, value: types.PointF) void {
     if (self.t_platform_velocity_storage == 0 or value.y <= self.platform_velocity.y or types.abs(value.x) > types.abs(self.platform_velocity.x) or
         (std.math.sign(value.x) != std.math.sign(self.platform_velocity.x)))
     {
-        self.t_platform_velocity_storage = 50;
+        self.t_platform_velocity_storage = 15;
         self.platform_velocity = value;
     }
 }
@@ -812,5 +864,8 @@ pub fn as_table(self: *Player) GameObject.IsGameObject {
 pub inline fn refill_dashes(self: *Player) void {
     if (self.dashes < self.max_dashes) {
         self.dashes = self.max_dashes;
+    }
+    if (self.midair_shot_count < MAX_MIDAIR_SHOT) {
+        self.midair_shot_count = MAX_MIDAIR_SHOT;
     }
 }

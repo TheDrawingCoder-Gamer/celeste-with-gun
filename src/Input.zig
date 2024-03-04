@@ -12,6 +12,7 @@ input_action: bool = false,
 input_action_pressed: u4 = 0,
 input_gun: bool = false,
 input_gun_pressed: u4 = 0,
+input_lock_held: bool = false,
 axis_x_value: i2 = 0,
 axis_x_turned: bool = false,
 axis_y_value: i2 = 0,
@@ -28,7 +29,7 @@ pub fn update(self: *Input) void {
     const jump = tic80.btn(4 + player_idx);
     const action = tic80.btn(5 + player_idx);
     const gun = tic80.btn(6 + player_idx);
-
+    const lock = tic80.btn(7 + player_idx);
     if (left) {
         if (right) {
             if (self.axis_x_turned) {
@@ -113,6 +114,8 @@ pub fn update(self: *Input) void {
         }
     }
     self.input_gun = gun;
+
+    self.input_lock_held = lock;
 }
 
 pub fn consume_jump_press(self: *Input) bool {

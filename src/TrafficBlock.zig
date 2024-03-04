@@ -178,8 +178,8 @@ fn draw_chain(self: *TrafficBlock) void {
 
     defer tdraw.set4bpp();
     tdraw.set2bpp();
-    tic.PALETTE_MAP.color1 = 14;
-    tic.PALETTE_MAP.color2 = 15;
+    tic.PALETTE_MAP.color1 = 8;
+    tic.PALETTE_MAP.color2 = 14;
 
     const gear_frame: i32 = @intFromFloat(self.gear_frame);
     const frame = 962 + gear_frame;
