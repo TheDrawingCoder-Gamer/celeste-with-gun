@@ -91,7 +91,7 @@ pub fn init(self: *Level) !void {
                 _ = try SwitchDoor.create(self.state.allocator, self.state, entity.x, entity.y, .{ .kind = door.kind, .w = @divFloor(entity.w, 8), .h = @divFloor(entity.h, 8), .target = door.target });
             },
             .traffic_block => |traffic| {
-                _ = try TrafficBlock.create(self.state, entity.x, entity.y, @divFloor(entity.w, 8), @divFloor(entity.h, 8), traffic.target);
+                _ = try TrafficBlock.create(self.state, entity.x, entity.y, @divFloor(entity.w, 8), @divFloor(entity.h, 8), traffic.target, traffic.speed);
             },
             .destructible => |d| {
                 _ = try Destructible.create(self.state.allocator, entity.x, entity.y, d.shoot_only, self.state);

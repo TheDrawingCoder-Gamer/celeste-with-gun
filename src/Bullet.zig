@@ -102,9 +102,9 @@ pub fn create(allocator: std.mem.Allocator, state: *GameState, x: i32, y: i32, p
     obj.hit_y = 3;
     obj.hit_w = 2;
     obj.hit_h = 2;
-    obj.hurtbox = .{ .x = 1, .y = 1, .w = 7, .h = 7 };
-    obj.speed_x = @floatFromInt(@as(i32, dir.axis_x()) * 4);
-    obj.speed_y = @floatFromInt(@as(i32, dir.axis_y()) * 4);
+    obj.hurtbox = .{ .x = -1, .y = -1, .w = 9, .h = 9 };
+    obj.speed_x = @floatFromInt(@as(i32, dir.axis_x()) * 8);
+    obj.speed_y = @floatFromInt(@as(i32, dir.axis_y()) * 8);
     const self = try allocator.create(Bullet);
     self.player = player;
     self.game_object = obj;

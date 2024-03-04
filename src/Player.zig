@@ -17,7 +17,7 @@ const types = @import("types.zig");
 const State = enum { normal, death, dash, grapple_start, grapple_attach, grapple_pull };
 const Mode = enum { none, dash, grapple };
 
-pub const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .as_rider = &as_rider };
+pub const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .as_rider = &as_rider, .ptr_die = @ptrCast(&die) };
 const rider_vtable: GameObject.IRide.VTable = .{ .riding_platform_check = &riding_platform_check, .riding_platform_set_velocity = &riding_platform_set_velocity };
 
 fn as_rider(ctx: *anyopaque) GameObject.IRide {
@@ -94,9 +94,15 @@ fn get_object(self: *Player) *GameObject {
 fn approach(x: f32, target: f32, max_delta: f32) f32 {
     return if (x < target) @min(x + max_delta, target) else @max(x - max_delta, target);
 }
-
 fn shoot(self: *Player) void {
     _ = self.input.consume_gun_press();
+    self.shoot_raw();
+}
+fn dash_shoot(self: *Player) void {
+    _ = self.input.consume_action_press();
+    self.shoot_raw();
+}
+fn shoot_raw(self: *Player) void {
     const x_dir = if (self.input.input_y == 0 and self.input.input_x == 0) self.game_object.facing else self.input.input_x;
     self.shoot_dir(x_dir, self.input.input_y, -1);
 
@@ -268,6 +274,7 @@ fn end_dash(self: *Player) void {
     }
 }
 pub fn die(self: *Player) void {
+    if (self.state == .death) return;
     self.state = .death;
     self.t_death = 0;
     self.voice.play(1, .{ .volume = 10 });
@@ -383,8 +390,11 @@ pub fn update(self: *Player) void {
                 switch (self.mode) {
                     .grapple => {},
                     .dash => {
-                        if (self.dashes > 0)
+                        if (self.dashes > 0) {
                             self.dash();
+                        } else {
+                            self.dash_shoot();
+                        }
                     },
                     .none => {},
                 }
@@ -412,6 +422,10 @@ pub fn update(self: *Player) void {
             }
             if (self.t_dash_time == 0) {
                 self.end_dash();
+            }
+
+            if (self.input.input_action_pressed > 0 and self.dashes == 0) {
+                self.dash_shoot();
             }
         },
         .grapple_start => {},
@@ -645,23 +659,25 @@ pub inline fn pallete(player: u2) void {
 }
 
 pub fn dash_palette(player: u2, dash_n: u8, recharging: bool) void {
-    const baseColor: u4 = switch (player) {
+    const baseColor: struct { u4, u4 } = switch (player) {
         0 => switch (dash_n) {
-            0 => 9,
-            2 => 5,
-            else => 2,
+            0 => .{ 9, 10 },
+            2 => .{ 5, 6 },
+            3 => .{ 13, 14 },
+            4 => .{ 4, 3 },
+            else => .{ 2, 3 },
         },
-        1 => 3,
+        1 => .{ 3, 4 },
         // ???
-        2 => 5,
-        3 => 9,
+        2 => .{ 5, 6 },
+        3 => .{ 9, 10 },
     };
     if (recharging) {
         tic80.PALETTE_MAP.color1 = 12;
     } else {
-        tic80.PALETTE_MAP.color1 = baseColor;
+        tic80.PALETTE_MAP.color1 = baseColor[0];
     }
-    tic80.PALETTE_MAP.color2 = baseColor + 1;
+    tic80.PALETTE_MAP.color2 = baseColor[1];
     tic80.PALETTE_MAP.color3 = 12;
 }
 

@@ -24,6 +24,10 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, args: Cre
     obj.special_type = .sheild_toggle;
     obj.shootable = args.is_gun;
     obj.touchable = args.is_touch;
+    obj.hit_x = -4;
+    obj.hit_y = -4;
+    obj.hit_w = 12;
+    obj.hit_h = 12;
 
     const self = try allocator.create(Switch);
     self.game_object = obj;

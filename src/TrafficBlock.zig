@@ -23,8 +23,9 @@ last_touched: u64 = 0,
 lerp: f32 = 0,
 gear_frame: f32 = 0,
 audio_frame: i32 = 0,
+speed: f32 = 1.0,
 
-pub fn create(state: *GameState, x: i32, y: i32, w: u31, h: u31, target: types.Point) !*TrafficBlock {
+pub fn create(state: *GameState, x: i32, y: i32, w: u31, h: u31, target: types.Point, speed: f32) !*TrafficBlock {
     var obj = GameObject.create(state, x, y);
     obj.hit_w = 8 * w;
     obj.hit_h = 8 * h;
@@ -32,7 +33,7 @@ pub fn create(state: *GameState, x: i32, y: i32, w: u31, h: u31, target: types.P
     obj.touchable = true;
 
     const self = try state.allocator.create(TrafficBlock);
-    self.* = .{ .start = .{ .x = x, .y = y }, .target = target, .game_object = obj, .width = w, .height = h };
+    self.* = .{ .start = .{ .x = x, .y = y }, .target = target, .game_object = obj, .width = w, .height = h, .speed = speed };
 
     const node = try state.wrap_node(.{ .ptr = self, .table = vtable });
     state.objects.append(node);
@@ -102,7 +103,7 @@ fn update(ctx: *anyopaque) void {
     switch (self.state) {
         .idle => {},
         .advancing => {
-            self.lerp = types.approach(self.lerp, 1, 2.0 / 60.0);
+            self.lerp = types.approach(self.lerp, 1, 2.0 * self.speed / 60.0);
             if (self.lerp == 1.0) {
                 self.stall();
             }
