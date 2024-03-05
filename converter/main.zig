@@ -3,6 +3,7 @@ const s2s = @import("s2s");
 const SavedLevel = @import("common").Level;
 const math = @import("common").math;
 const json = std.json;
+const parsec = @import("parsec");
 
 const RawFieldInstance = struct { __identifier: []u8, __value: json.Value, __type: []u8 };
 const EntityInstance = struct { __identifier: []u8, __grid: [2]i32, fieldInstances: []RawFieldInstance, __worldX: i32, __worldY: i32, width: u31, height: u31 };
@@ -32,9 +33,11 @@ pub fn main() !void {
         da_map[@intCast(tile.pos.y * 240 + tile.pos.x)] = tile.tile;
     }
 
-    const infile = try std.fs.openFileAbsolute(inpath, .{ .mode = .write_only });
+    var infile = try std.fs.openFileAbsolute(inpath, .{ .mode = .read_write });
     defer infile.close();
-    try infile.seekFromEnd(0);
+    const stripped_maps = try strip_maps(&infile);
+    try infile.seekTo(0);
+    try infile.writeAll(stripped_maps);
     try save_bin_section(infile.writer(), "MAP", &da_map, 240, true);
 
     @memset(@as([]u8, &da_map), 0);
@@ -258,4 +261,27 @@ fn process_entity(world_pos: math.Point, o_entities: *std.ArrayList(SavedLevel.E
     if (kind) |k| {
         try o_entities.append(.{ .x = ex, .y = ey, .w = ew, .h = eh, .kind = k });
     }
+}
+
+fn strip_maps(input: *std.fs.File) ![]u8 {
+    const FBS = std.fs.File;
+    const map_lit = parsec.Literal(FBS).init("-- <MAP>").parser();
+    const map_end_lit = parsec.Literal(FBS).init("-- </MAP>").parser();
+    const map7_lit = parsec.Literal(FBS).init("-- <MAP7>").parser();
+    const map7_end_lit = parsec.Literal(FBS).init("-- </MAP7>").parser();
+    const ManyTilLit = parsec.ManyTill(u8, []u8, FBS);
+    const many_til_map = ManyTilLit.init(parsec.AnyChar(FBS).parser(), map_lit).parser();
+    const skip_map_end = ManyTilLit.init(parsec.AnyChar(FBS).parser(), map_end_lit).parser();
+    const many_til_map7 = ManyTilLit.init(parsec.AnyChar(FBS).parser(), map7_lit).parser();
+    const skip_map7_end = ManyTilLit.init(parsec.AnyChar(FBS).parser(), map7_end_lit).parser();
+
+    const final = parsec.Sequence(struct { []u8, []u8, []u8, []u8 }, FBS).init(.{ many_til_map, skip_map_end, many_til_map7, skip_map7_end });
+
+    const res = try final.parser().parseOrDie(alloc, input);
+    defer res.deinit();
+    const rest = try input.reader().readAllAlloc(alloc, 65565);
+    defer alloc.free(rest);
+    const out = try std.mem.join(alloc, "", &.{ res.value[0], res.value[2], rest });
+
+    return out;
 }
