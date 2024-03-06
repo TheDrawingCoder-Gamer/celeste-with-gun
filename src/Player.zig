@@ -363,19 +363,7 @@ pub fn update(self: *Player) void {
 
             var target: f32 = 0;
             var accel: f32 = 0.2;
-            // if input locked, ignore
-            if (self.input.input_lock_held) {
-                if (on_ground) {
-                    if (self.crouching) {
-                        accel = 0.25;
-                    } else {
-                        accel = 0.4;
-                    }
-                } else {
-                    // reduce air friction while locked in
-                    accel = 0.05;
-                }
-            } else if (std.math.sign(self.game_object.speed_x) * self.game_object.speed_x > 2 and self.input.input_x == @as(i2, @intFromFloat(std.math.sign(self.game_object.speed_x)))) {
+            if (std.math.sign(self.game_object.speed_x) * self.game_object.speed_x > 2 and self.input.input_x == @as(i2, @intFromFloat(std.math.sign(self.game_object.speed_x)))) {
                 target = 1;
                 accel = 0.05;
             } else if (on_ground) {
@@ -446,7 +434,7 @@ pub fn update(self: *Player) void {
                     .dash => {
                         if (self.dashes > 0) {
                             self.dash();
-                        } else {
+                        } else if (self.t_shoot_cooldown == 0) {
                             self.dash_shoot();
                         }
                     },

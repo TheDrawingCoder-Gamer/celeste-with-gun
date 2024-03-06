@@ -4,6 +4,7 @@ const SavedLevel = @import("common").Level;
 const math = @import("common").math;
 const json = std.json;
 const parsec = @import("parsec");
+const tatl = @import("tatl");
 
 const RawFieldInstance = struct { __identifier: []u8, __value: json.Value, __type: []u8 };
 const EntityInstance = struct { __identifier: []u8, __grid: [2]i32, fieldInstances: []RawFieldInstance, __worldX: i32, __worldY: i32, width: u31, height: u31 };
@@ -14,37 +15,117 @@ const PointType = struct { cx: i32, cy: i32 };
 
 var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = false }){};
 var alloc: std.mem.Allocator = undefined;
+
+const RunMode = enum {
+    pack,
+    unpack,
+
+    pub fn parse(in: []const u8) !RunMode {
+        if (std.mem.eql(u8, in, "pack")) {
+            return .pack;
+        } else if (std.mem.eql(u8, in, "unpack")) {
+            return .unpack;
+        }
+        return error.InvalidMode;
+    }
+};
+
+const SPR_SIZE = 32;
+const PIXELS_IN_SPR = 64;
 pub fn main() !void {
     alloc = gpa.allocator();
     var args = try std.process.argsWithAllocator(alloc);
     if (!args.skip()) return error.TooFewArgs;
+    const mode = try RunMode.parse(args.next() orelse return error.TooFewArgs);
 
-    const inpath = args.next() orelse return error.TooFewArgs;
-    const mappath = args.next() orelse return error.TooFewArgs;
+    switch (mode) {
+        .pack => {
+            const respath = args.next() orelse return error.TooFewArgs;
+            const unpackedpath = args.next() orelse return error.TooFewArgs;
+            const bpp4path = args.next() orelse return error.TooFewArgs;
+            const bpp2path = args.next() orelse return error.TooFewArgs;
+            const bpp1path = args.next() orelse return error.TooFewArgs;
+            const tilepath = args.next() orelse return error.TooFewArgs;
+            const mappath = args.next() orelse return error.TooFewArgs;
 
-    const mapfile = try std.fs.openFileAbsolute(mappath, .{ .mode = .read_only });
+            const bpp4ase = blk: {
+                var file = try std.fs.openFileAbsolute(bpp4path, .{});
+                defer file.close();
+                break :blk try tatl.import(alloc, file.reader());
+            };
+            defer bpp4ase.free(alloc);
+            const bpp2ase = blk: {
+                var file = try std.fs.openFileAbsolute(bpp2path, .{});
+                defer file.close();
+                break :blk try tatl.import(alloc, file.reader());
+            };
+            defer bpp2ase.free(alloc);
+            const bpp1ase = blk: {
+                var file = try std.fs.openFileAbsolute(bpp1path, .{});
+                defer file.close();
+                break :blk try tatl.import(alloc, file.reader());
+            };
+            defer bpp1ase.free(alloc);
+            const tilease = blk: {
+                var file = try std.fs.openFileAbsolute(tilepath, .{});
+                defer file.close();
+                break :blk try tatl.import(alloc, file.reader());
+            };
+            defer tilease.free(alloc);
 
-    const in_map_data = try mapfile.readToEndAlloc(alloc, 1024 * 1024);
-    const map_data = try get_compressed_map(in_map_data);
+            const mapfile = try std.fs.openFileAbsolute(mappath, .{ .mode = .read_only });
+            defer mapfile.close();
+            const res_data = try ase_packer(bpp4ase, bpp2ase, bpp1ase, tilease);
 
-    var da_map: [32_640]u8 = .{0} ** 32_640;
+            const in_map_data = try mapfile.readToEndAlloc(alloc, 1024 * 1024);
+            const map_data = try get_compressed_map(in_map_data);
 
-    for (map_data.tiles) |tile| {
-        da_map[@intCast(tile.pos.y * 240 + tile.pos.x)] = tile.tile;
+            var da_map: [32_640]u8 = .{0} ** 32_640;
+
+            for (map_data.tiles) |tile| {
+                da_map[@intCast(tile.pos.y * 240 + tile.pos.x)] = tile.tile;
+            }
+            const unpacked_data = blk: {
+                const unpacked_file = try std.fs.openFileAbsolute(unpackedpath, .{ .mode = .read_only });
+                defer unpacked_file.close();
+                break :blk try unpacked_file.readToEndAlloc(alloc, 65536);
+            };
+            defer alloc.free(unpacked_data);
+
+            var resfile = try std.fs.createFileAbsolute(respath, .{});
+            defer resfile.close();
+            try resfile.writeAll(unpacked_data);
+            try resfile.writer().writeByte('\n');
+
+            try save_bin_section(resfile.writer(), "MAP", &da_map, 240, true);
+
+            @memset(@as([]u8, &da_map), 0);
+
+            var map_data_fbs = std.io.fixedBufferStream(&da_map);
+            try s2s.serialize(map_data_fbs.writer(), []SavedLevel, map_data.levels);
+            try save_bin_section(resfile.writer(), "MAP7", &da_map, 240, true);
+
+            // row size is @sizeOf(tic_tile), which is an 8x8 sprite with 4bpp
+            // 8x8 = 64 nibbles / 2 = 32 bytes
+            try save_bin_section(resfile.writer(), "SPRITES", &res_data.sprites.bytes, SPR_SIZE, true);
+            try save_bin_section(resfile.writer(), "TILES", &res_data.tiles.bytes, SPR_SIZE, true);
+            try save_bin_section(resfile.writer(), "FLAGS", &res_data.flags, 256, true);
+        },
+        .unpack => {
+            const packedpath = args.next() orelse return error.TooFewArgs;
+            const unpackedpath = args.next() orelse return error.TooFewArgs;
+
+            const unpacked_data = blk: {
+                const file = try std.fs.openFileAbsolute(packedpath, .{});
+                defer file.close();
+                break :blk try extract_packed(file);
+            };
+
+            const unpacked_file = try std.fs.createFileAbsolute(unpackedpath, .{});
+            defer unpacked_file.close();
+            try unpacked_file.writeAll(unpacked_data);
+        },
     }
-
-    var infile = try std.fs.openFileAbsolute(inpath, .{ .mode = .read_write });
-    defer infile.close();
-    const stripped_maps = try strip_maps(&infile);
-    try infile.seekTo(0);
-    try infile.writeAll(stripped_maps);
-    try save_bin_section(infile.writer(), "MAP", &da_map, 240, true);
-
-    @memset(@as([]u8, &da_map), 0);
-
-    var map_data_fbs = std.io.fixedBufferStream(&da_map);
-    try s2s.serialize(map_data_fbs.writer(), []SavedLevel, map_data.levels);
-    try save_bin_section(infile.writer(), "MAP7", &da_map, 240, true);
 }
 
 fn buf_empty(data: []const u8) bool {
@@ -75,7 +156,9 @@ fn save_bin_buffer(writer: anytype, data: []const u8, row: usize, flip: bool) !v
 fn save_bin_section(writer: anytype, tag: []const u8, data: []const u8, row_size: usize, flip: bool) !void {
     const count = @divExact(data.len, row_size);
 
-    if (buf_empty(data)) return;
+    if (buf_empty(data)) {
+        return;
+    }
     try writer.print("-- <{s}>\n", .{tag});
 
     {
@@ -263,7 +346,8 @@ fn process_entity(world_pos: math.Point, o_entities: *std.ArrayList(SavedLevel.E
     }
 }
 
-fn strip_maps(input: *std.fs.File) ![]u8 {
+fn strip_maps(input: std.fs.File) ![]u8 {
+    var f = input;
     const FBS = std.fs.File;
     const map_lit = parsec.Literal(FBS).init("-- <MAP>").parser();
     const map_end_lit = parsec.Literal(FBS).init("-- </MAP>").parser();
@@ -277,11 +361,253 @@ fn strip_maps(input: *std.fs.File) ![]u8 {
 
     const final = parsec.Sequence(struct { []u8, []u8, []u8, []u8 }, FBS).init(.{ many_til_map, skip_map_end, many_til_map7, skip_map7_end });
 
-    const res = try final.parser().parseOrDie(alloc, input);
+    const res = try final.parser().parseOrDie(alloc, &f);
     defer res.deinit();
     const rest = try input.reader().readAllAlloc(alloc, 65565);
     defer alloc.free(rest);
     const out = try std.mem.join(alloc, "", &.{ res.value[0], res.value[2], rest });
 
     return out;
+}
+
+fn extract_packed(input_f: std.fs.File) ![]u8 {
+    var input = input_f;
+    const whitelist = [_][]const u8{ "WAVES", "SFX", "PATTERNS", "TRACKS", "PALETTE" };
+    const len = try input.seekableStream().getEndPos();
+    var good_data = try alloc.alloc(u8, @intCast(len));
+    defer alloc.free(good_data);
+    var fbs = std.io.fixedBufferStream(good_data);
+    while (true) {
+        const data = try input.reader().readUntilDelimiterOrEofAlloc(alloc, '\n', 1024) orelse {
+            const final_len = try fbs.getPos();
+            const out_data = try alloc.alloc(u8, final_len);
+            @memcpy(out_data, good_data[0..final_len]);
+            return out_data;
+        };
+        defer alloc.free(data);
+        if (std.mem.eql(u8, data[0..5], "-- <")) {
+            const ending = data[5] == '/';
+            if (ending) unreachable;
+            var good_tag: ?[]const u8 = null;
+            inline for (whitelist) |tag| {
+                if (std.mem.eql(u8, tag, data[5 .. 5 + tag.len])) {
+                    good_tag = tag;
+                    break;
+                }
+            }
+            if (good_tag) |tag| {
+                try fbs.writer().writeAll(data);
+                try fbs.writer().writeByte('\n');
+
+                const end_tag = try std.fmt.allocPrint(alloc, "-- </{s}>\n", .{tag});
+                defer alloc.free(end_tag);
+                var end_lit = parsec.Literal(std.fs.File).init(end_tag);
+                var many_til = parsec.ManyTill(u8, []u8, std.fs.File).init(parsec.AnyChar(std.fs.File).parser(), end_lit.parser());
+                const res = try many_til.parser().parseOrDie(alloc, &input);
+                defer res.deinit();
+                try fbs.writer().writeAll(res.value);
+                try fbs.writer().writeAll(end_tag);
+            } else {
+                // skip section
+                // assumes that line is trimmed, which should be true if i never ever manually touch the file
+                const tag = data[5 .. data.len - 1];
+                const end_tag = try std.fmt.allocPrint(alloc, "-- </{s}>\n", .{tag});
+                defer alloc.free(end_tag);
+                var end_lit = parsec.Literal(std.fs.File).init(end_tag);
+                var many_til = parsec.ManyTill(u8, []u8, std.fs.File).init(parsec.AnyChar(std.fs.File).parser(), end_lit.parser());
+                const res = try many_til.parser().parseOrDie(alloc, &input);
+                res.deinit();
+            }
+        } else {
+            try fbs.writer().writeAll(data);
+            try fbs.writer().writeByte('\n');
+        }
+    }
+}
+
+const SWEETIE_PALETTE = [16]tatl.RGBA{
+    .{ .r = 26, .g = 28, .b = 44, .a = 255 },
+    .{ .r = 93, .g = 39, .b = 93, .a = 255 },
+    .{ .r = 177, .g = 64, .b = 83, .a = 255 },
+    .{ .r = 239, .g = 125, .b = 87, .a = 255 },
+    .{ .r = 255, .g = 205, .b = 117, .a = 255 },
+    .{ .r = 167, .g = 240, .b = 112, .a = 255 },
+    .{ .r = 56, .g = 183, .b = 100, .a = 255 },
+    .{ .r = 37, .g = 113, .b = 121, .a = 255 },
+    .{ .r = 41, .g = 54, .b = 111, .a = 255 },
+    .{ .r = 59, .g = 93, .b = 201, .a = 255 },
+    .{ .r = 65, .g = 166, .b = 246, .a = 255 },
+    .{ .r = 115, .g = 239, .b = 247, .a = 255 },
+    .{ .r = 244, .g = 244, .b = 244, .a = 255 },
+    .{ .r = 148, .g = 176, .b = 194, .a = 255 },
+    .{ .r = 86, .g = 108, .b = 134, .a = 255 },
+    .{ .r = 51, .g = 60, .b = 87, .a = 255 },
+};
+
+// don't ask...
+inline fn minus(comptime T: type, a: T, b: T) T {
+    return @as(T, a) - @as(T, b);
+}
+fn nearest_color(color: tatl.RGBA, count: usize) u4 {
+    var min: u32 = std.math.maxInt(u32);
+    var nearest: u4 = 0;
+    for (SWEETIE_PALETTE[0..count], 0..) |pal_col, i| {
+        const dr: i32 = minus(i32, pal_col.r, color.r);
+        const dg: i32 = minus(i32, pal_col.g, color.g);
+        const db: i32 = minus(i32, pal_col.b, color.b);
+        const ds: u31 = @intCast(dr * dr + dg * dg + db * db);
+        if (ds < min) {
+            min = ds;
+            nearest = @intCast(i);
+        }
+    }
+    return nearest;
+}
+
+const BitsPerPixel = enum { one, two, four };
+fn color_at(color_depth: tatl.ColorDepth, ase_pallete: tatl.Palette, cel: tatl.ImageCel, x: usize, y: usize) !tatl.RGBA {
+    switch (color_depth) {
+        .grayscale => return error.NoGrayscale,
+        .rgba => {
+            const idx = (y * cel.width + x) * 4;
+            const r = cel.pixels[idx];
+            const g = cel.pixels[idx + 1];
+            const b = cel.pixels[idx + 2];
+            const a = cel.pixels[idx + 3];
+
+            return .{ .r = r, .g = g, .b = b, .a = a };
+        },
+        .indexed => {
+            const idx = y * cel.width + x;
+
+            const pix = cel.pixels[idx];
+            const color = ase_pallete.colors[pix];
+
+            return color;
+        },
+    }
+}
+
+fn pal_color_at(color_depth: tatl.ColorDepth, ase_palette: tatl.Palette, cel: tatl.ImageCel, x: usize, y: usize, bpp: BitsPerPixel) !u4 {
+    const col_at = try color_at(color_depth, ase_palette, cel, x, y);
+    const bpp_num: usize = switch (bpp) {
+        .one => 2,
+        .two => 4,
+        .four => 16,
+    };
+    return nearest_color(col_at, bpp_num);
+}
+
+const PackedTilesheet = std.PackedIntArrayEndian(u4, .little, 128 * 128);
+const PackedResult = struct {
+    sprites: PackedTilesheet,
+    tiles: PackedTilesheet,
+    flags: [16 * 16 * 2]u8,
+};
+fn data_at(ase: tatl.AsepriteImport, x: usize, y: usize) !u8 {
+    for (ase.slices) |slice| {
+        if (slice.user_data.text.len == 0) continue;
+        for (slice.keys) |key| {
+            if (key.x <= x and key.x + @as(i32, @intCast(key.width)) >= x and key.y <= y and key.y + @as(i32, @intCast(key.height)) >= y) {
+                return std.fmt.parseInt(u8, slice.user_data.text, 0);
+            }
+        }
+    }
+
+    return 0x00;
+}
+fn get_image_from_cel_or_cry(cel: tatl.Cel) !tatl.ImageCel {
+    switch (cel.data) {
+        .raw_image => |c| return c,
+        .compressed_image => |c| return c,
+        else => return error.NotAnImage,
+    }
+}
+fn ase_packer(bpp4: tatl.AsepriteImport, bpp2: tatl.AsepriteImport, bpp1: tatl.AsepriteImport, tiles: tatl.AsepriteImport) !PackedResult {
+    var sprite_data = PackedTilesheet.initAllTo(0);
+    {
+        const img = try get_image_from_cel_or_cry(bpp4.frames[0].cels[0]);
+        for (0..16) |i| {
+            for (0..16) |j| {
+                for (0..8) |ii| {
+                    for (0..8) |jj| {
+                        const x = i * 8 + ii;
+                        const y = j * 8 + jj;
+                        const col = try pal_color_at(bpp4.color_depth, bpp4.palette, img, x, y, .four);
+                        // initial offset + new offset
+                        sprite_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
+                    }
+                }
+            }
+        }
+    }
+    {
+        const img = try get_image_from_cel_or_cry(bpp2.frames[0].cels[0]);
+        for (0..16) |i| {
+            for (0..16) |j| {
+                for (0..8) |ii| {
+                    for (0..8) |jj| {
+                        const x = i * 8 + ii;
+                        const sx = x * 2;
+                        const y = j * 8 + jj;
+                        const col1 = try pal_color_at(bpp2.color_depth, bpp2.palette, img, sx, y, .two);
+                        const col2 = try pal_color_at(bpp2.color_depth, bpp2.palette, img, sx + 1, y, .two);
+                        const col = (col2 << 2) + col1;
+                        if (col != 0) {
+                            sprite_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    {
+        const img = try get_image_from_cel_or_cry(bpp1.frames[0].cels[0]);
+        for (0..16) |i| {
+            for (0..16) |j| {
+                for (0..8) |ii| {
+                    for (0..8) |jj| {
+                        const x = (i * 8) + ii;
+                        const sx = x * 4;
+                        const y = j * 8 + jj;
+                        const col1 = try pal_color_at(bpp1.color_depth, bpp1.palette, img, sx, y, .one);
+                        const col2 = try pal_color_at(bpp1.color_depth, bpp1.palette, img, sx + 1, y, .one);
+                        const col3 = try pal_color_at(bpp1.color_depth, bpp1.palette, img, sx + 2, y, .one);
+                        const col4 = try pal_color_at(bpp1.color_depth, bpp1.palette, img, sx + 3, y, .one);
+                        const col = (col4 << 3) + (col3 << 2) + (col2 << 1) + col1;
+                        if (col != 0) {
+                            sprite_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    var tile_data = PackedTilesheet.initAllTo(0);
+    {
+        const img = try get_image_from_cel_or_cry(tiles.frames[0].cels[0]);
+        for (0..16) |i| {
+            for (0..16) |j| {
+                for (0..8) |ii| {
+                    for (0..8) |jj| {
+                        const x = (i * 8) + ii;
+                        const y = (j * 8) + jj;
+                        const col = try pal_color_at(tiles.color_depth, tiles.palette, img, x, y, .four);
+                        tile_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
+                    }
+                }
+            }
+        }
+    }
+    // end is sprite sheet
+    var flags: [16 * 16 * 2]u8 = std.mem.zeroes([16 * 16 * 2]u8);
+    for (0..16) |x| {
+        for (0..16) |y| {
+            const data = try data_at(tiles, x * 8, y * 8);
+            flags[y * 16 + x] = data;
+        }
+    }
+
+    return .{ .sprites = sprite_data, .tiles = tile_data, .flags = flags };
 }

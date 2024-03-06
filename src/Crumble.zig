@@ -21,7 +21,7 @@ fn draw(ctx: *anyopaque) void {
     tdraw.set2bpp();
     // defer as we only draw in 2bpp
     defer tdraw.set4bpp();
-    self.game_object.game_state.draw_spr(800 + @as(i32, @divFloor(self.t_alive, 4)), self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
+    self.game_object.game_state.draw_spr(800 + @min(@as(i32, @divFloor(self.t_alive, 4)), 4), self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
 }
 
 fn destroy(ctx: *anyopaque, allocator: Allocator) void {

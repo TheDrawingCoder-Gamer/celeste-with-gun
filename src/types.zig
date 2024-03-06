@@ -4,14 +4,7 @@ const std = @import("std");
 const tic = @import("common").tic;
 const math = @import("common").math;
 
-pub const Point = math.Point;
-
-pub const Vec2 = PointF;
-pub const PointF = math.PointF;
-
-pub const approach = math.approach;
-pub const sine_in_out = math.sine_in_out;
-pub const lerp = math.lerp;
+pub usingnamespace math;
 
 pub fn abs(x: anytype) @TypeOf(x) {
     return x * std.math.sign(x);
@@ -26,10 +19,10 @@ pub const AABB = struct {
     pub fn overlaps(a: AABB, b: AABB) bool {
         return ((a.x < b.x + b.w and a.x + a.w > b.x) or (a.x + a.w > b.x and a.x < b.x + b.w)) and ((a.y < b.y + b.h and a.y + a.h > b.y) or (a.y + a.h > b.y and a.y < b.y + b.h));
     }
-    pub fn top_left(self: AABB) Vec2 {
+    pub fn top_left(self: AABB) math.Vec2 {
         return .{ .x = self.x, .y = self.y };
     }
-    pub fn aabb_cast(source: AABB, target: AABB, direction: Vec2, max_distance: f32) ?Ray.Hit {
+    pub fn aabb_cast(source: AABB, target: AABB, direction: math.Vec2, max_distance: f32) ?Ray.Hit {
         const ray = Ray.create(.{ .x = source.x + source.w / 2.0, .y = source.y + source.h / 2.0 }, direction);
         var good_target = target;
         good_target.x -= source.w / 2;
@@ -39,7 +32,7 @@ pub const AABB = struct {
         return ray.raycast(good_target, max_distance);
     }
 
-    pub fn offset(self: AABB, by: Vec2) AABB {
+    pub fn offset(self: AABB, by: math.Vec2) AABB {
         return .{ .x = self.x + by.x, .y = self.y + by.y, .w = self.w, .h = self.h };
     }
 };
@@ -85,9 +78,9 @@ pub const Box = struct {
 pub const Direction = enum(u2) { up = 0, right = 1, down = 2, left = 3 };
 
 pub const LineSegment = struct {
-    start: PointF,
-    end: PointF,
-    pub fn intersects(p_line: LineSegment, q_line: LineSegment) ?PointF {
+    start: math.PointF,
+    end: math.PointF,
+    pub fn intersects(p_line: LineSegment, q_line: LineSegment) ?math.PointF {
         const p = p_line.start;
         const q = q_line.start;
         const r = p_line.end.minus(p);
@@ -124,7 +117,7 @@ pub const LineSegment = struct {
 test "line intersects" {
     const segment_1: LineSegment = .{ .start = .{ .x = 0, .y = 0 }, .end = .{ .x = 0, .y = -1 } };
     const segment_2: LineSegment = .{ .start = .{ .x = 1, .y = -0.5 }, .end = .{ .x = -1, .y = -0.5 } };
-    const res: ?PointF = .{ .x = 0, .y = -0.5 };
+    const res: ?math.PointF = .{ .x = 0, .y = -0.5 };
     try std.testing.expectEqual(res, segment_1.intersects(segment_2));
 }
 
@@ -135,7 +128,7 @@ pub const AngledLine = struct {
         self.line.debug_draw(cam, color);
         const diff = self.line.end.minus(self.line.start);
         const midpoint = self.line.start.add(diff.times(0.5));
-        const point = PointF.from_radians(self.angle);
+        const point = math.PointF.from_radians(self.angle);
         _ = tic.vbank(1);
         const sx = midpoint.x - cam.x;
         const sy = midpoint.y - cam.y;
@@ -146,16 +139,16 @@ pub const AngledLine = struct {
 
 pub const Ray = struct {
     pub const Hit = struct {
-        point: Vec2,
-        normal: Vec2,
+        point: math.Vec2,
+        normal: math.Vec2,
         distance: f32,
     };
-    start: Vec2,
-    direction: Vec2,
-    pub fn create(origin: Vec2, direction: Vec2) Ray {
+    start: math.Vec2,
+    direction: math.Vec2,
+    pub fn create(origin: math.Vec2, direction: math.Vec2) Ray {
         return .{ .start = origin, .direction = direction.normalized() };
     }
-    pub fn from_to(from: Vec2, to: Vec2) Ray {
+    pub fn from_to(from: math.Vec2, to: math.Vec2) Ray {
         return .{ .start = from, .direction = to.minus(from) };
     }
     pub fn raycast(self: Ray, target: AABB, max_distance: f32) ?Ray.Hit {
@@ -196,42 +189,3 @@ pub const Ray = struct {
         return out_hit;
     }
 };
-
-const tau = std.math.tau;
-const pi = std.math.pi;
-
-pub fn normalize_angle(theta: f32) f32 {
-    var angle = @mod(theta, tau);
-    if (angle > pi)
-        angle -= tau;
-    return angle;
-}
-
-pub fn angle_difference(left: f32, right: f32) f32 {
-    return normalize_angle(normalize_angle(left) - normalize_angle(right));
-}
-
-// how aligned two angles are. 1 is equavilant, -1 is literal opposites.
-pub fn angle_alignment(left: f32, right: f32) f32 {
-    return @cos(angle_difference(left, right));
-}
-
-pub fn angles_contain(a_target: f32, angle1: f32, angle2: f32) bool {
-    const target = normalize_angle(a_target);
-    const r_angle = @mod(@mod(angle2 - angle1, tau) + tau, tau);
-    const a1 = if (r_angle >= pi) angle2 else angle1;
-    const a2 = if (r_angle >= pi) angle1 else angle2;
-
-    if (a1 <= a2) {
-        return target >= a1 and target <= a2;
-    } else {
-        return target >= a1 or target <= a2;
-    }
-}
-
-// Digital input direction
-pub const DigitalDir = math.DigitalDir;
-pub const CardinalDir = math.CardinalDir;
-
-// don't @ me wikipedia told me so
-pub const PrincibleWind = math.PrincibleWind;

@@ -39,6 +39,9 @@ const TextureSource = enum(i32) { TILES = 0, MAP, VBANK1 };
 pub const WIDTH = 240;
 pub const HEIGHT = 136;
 
+pub const MAP_WIDTH = 240;
+pub const MAP_HEIGHT = 136;
+
 pub const FRAMEBUFFER: *allowzero volatile [16320]u8 = @as(*allowzero volatile [16320]u8, @ptrFromInt(0));
 pub const TILES: *[8192]u8 = @as(*[8192]u8, @ptrFromInt(0x4000));
 pub const SPRITES: *[8192]u8 = @as(*[8192]u8, @ptrFromInt(0x6000));

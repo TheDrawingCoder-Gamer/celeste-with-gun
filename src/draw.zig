@@ -1,6 +1,6 @@
 const tic = @import("common").tic;
 const std = @import("std");
-const types = @import("types.zig");
+const types = @import("common").math;
 
 pub const BPP: *u4 = @as(*u4, @ptrFromInt(0x3ffc));
 
@@ -89,3 +89,63 @@ pub fn arcb(sx: i32, sy: i32, r: i32, v_from: types.Vec2, v_to: types.Vec2, colo
         }
     }
 }
+
+pub const MapperTile = struct { flip: tic.Flip = .no, rotate: tic.Rotate = .no, tile: u8, transparent: ?[]const u8 = null };
+pub fn Mapper(
+    comptime Context: type,
+    comptime row_size: usize,
+    comptime map_height: usize,
+    comptime max_stack: usize,
+    comptime TileInfo: type,
+    comptime decodeFn: fn (ctx: Context, info: TileInfo, buf: *[max_stack]MapperTile) void,
+) type {
+    return struct {
+        ctx: Context,
+
+        const Self = @This();
+        pub fn init(ctx: Context) Self {
+            return .{ .ctx = ctx };
+        }
+        const MapArgs = struct {
+            transparent: []const u8 = &.{},
+        };
+        // Draw map from an array of tile info.
+        pub fn map(self: *const Self, cam: types.Point, buf: *const [row_size * map_height]TileInfo, args: MapArgs) void {
+            const ccx = @divFloor(cam.x, 8);
+            const ccy = @divFloor(cam.y, 8);
+
+            const x_off = -@rem(cam.x, 8);
+            const y_off = -@rem(cam.y, 8);
+
+            const minx = @max(0, ccx);
+            const miny = @max(0, ccy);
+
+            const maxx = @min(row_size - 1, ccx + 32);
+            const maxy = @min(map_height - 1, ccy + 18);
+
+            for (minx..maxx) |i| {
+                for (miny..maxy) |j| {
+                    var tiles: [max_stack]MapperTile = undefined;
+                    @memset(tiles, .{ .tile = 0 });
+                    const t_info = buf[j * row_size + i];
+                    decodeFn(self.ctx, t_info, &tiles);
+                    for (tiles) |t| {
+                        tic.spr(
+                            t.tile,
+                            i * 8 + x_off,
+                            j * 8 + y_off,
+                            .{ .rotate = t.rotate, .flip = t.flip, .transparent = if (t.transparent) |trans| trans else args.transparent },
+                        );
+                    }
+                }
+            }
+        }
+    };
+}
+
+fn default_map(ctx: void, info: u8, buf: *[1]MapperTile) void {
+    _ = ctx;
+    buf[0] = .{ .tile = info };
+}
+
+pub const DefaultMapper = Mapper(void, tic.MAP_WIDTH, tic.MAP_HEIGHT, 1, u8, default_map).init({});

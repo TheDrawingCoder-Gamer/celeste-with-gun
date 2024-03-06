@@ -33,12 +33,10 @@ fn update(self: *DashCrystal) void {
 
 fn touch(self: *DashCrystal, player: *Player) void {
     if (self.use_timer != 0) return;
-    if (self.dashes == 1) {
-        player.refill_dashes();
-        return;
-    }
+    // TODO: test for midair shot count?
     if (player.dashes < self.dashes) {
         self.use_timer = 120;
+        player.refill_dashes();
         player.dashes = self.dashes;
     }
 }

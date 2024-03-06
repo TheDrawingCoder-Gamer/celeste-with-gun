@@ -14,6 +14,10 @@
             .url = "https://github.com/TheDrawingCoder-Gamer/zig-buddy2/archive/de81a95ec895714a7d8b1b6197e71df089d2dfba.tar.gz",
             .hash = "122043f84d3baa2d35bde6cf442876381f832dda7399929fbba7624e0734b1096d39",
         },
+        .tatl = .{
+            .url = "https://github.com/TheDrawingCoder-Gamer/tatl/archive/7253075d375880733073d4624e7adf637de48f6f.tar.gz",
+            .hash = "1220bbb726abd03359a66183408f6cf282c6691217ead2d7c15df7613b11e6859ef7",
+        },
     },
     .paths = .{""},
 }

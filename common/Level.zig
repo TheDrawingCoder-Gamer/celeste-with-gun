@@ -2,7 +2,9 @@ const Level = @This();
 const math = @import("math.zig");
 
 pub const Tile = struct { pos: math.Point, tile: u8 };
-pub const CompressedMap = struct { levels: []Level, tiles: []Tile };
+pub const CompressedTile = packed struct(u16) { fg: u8, bg: u8 };
+// bg_tiles are in the bg obv
+pub const CompressedMap = struct { levels: []Level, tiles: []const Tile, bg_tiles: []const Tile = &.{} };
 pub const CamMode = enum(u8) { locked, follow_x, follow_y, free_follow };
 pub const Entity = struct {
     pub const Kind = union(enum) {
