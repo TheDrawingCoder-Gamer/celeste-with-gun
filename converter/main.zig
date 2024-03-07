@@ -3,7 +3,6 @@ const s2s = @import("s2s");
 const SavedLevel = @import("common").Level;
 const math = @import("common").math;
 const json = std.json;
-const parsec = @import("parsec");
 const tatl = @import("tatl");
 
 const RawFieldInstance = struct { __identifier: []u8, __value: json.Value, __type: []u8 };
@@ -346,30 +345,6 @@ fn process_entity(world_pos: math.Point, o_entities: *std.ArrayList(SavedLevel.E
     }
 }
 
-fn strip_maps(input: std.fs.File) ![]u8 {
-    var f = input;
-    const FBS = std.fs.File;
-    const map_lit = parsec.Literal(FBS).init("-- <MAP>").parser();
-    const map_end_lit = parsec.Literal(FBS).init("-- </MAP>").parser();
-    const map7_lit = parsec.Literal(FBS).init("-- <MAP7>").parser();
-    const map7_end_lit = parsec.Literal(FBS).init("-- </MAP7>").parser();
-    const ManyTilLit = parsec.ManyTill(u8, []u8, FBS);
-    const many_til_map = ManyTilLit.init(parsec.AnyChar(FBS).parser(), map_lit).parser();
-    const skip_map_end = ManyTilLit.init(parsec.AnyChar(FBS).parser(), map_end_lit).parser();
-    const many_til_map7 = ManyTilLit.init(parsec.AnyChar(FBS).parser(), map7_lit).parser();
-    const skip_map7_end = ManyTilLit.init(parsec.AnyChar(FBS).parser(), map7_end_lit).parser();
-
-    const final = parsec.Sequence(struct { []u8, []u8, []u8, []u8 }, FBS).init(.{ many_til_map, skip_map_end, many_til_map7, skip_map7_end });
-
-    const res = try final.parser().parseOrDie(alloc, &f);
-    defer res.deinit();
-    const rest = try input.reader().readAllAlloc(alloc, 65565);
-    defer alloc.free(rest);
-    const out = try std.mem.join(alloc, "", &.{ res.value[0], res.value[2], rest });
-
-    return out;
-}
-
 fn skip_to_end(allocator: std.mem.Allocator, input: anytype, a_output: anytype, tag: []const u8) !void {
     const GoodOutType = switch (@typeInfo(@TypeOf(a_output))) {
         .Optional => @TypeOf(a_output),
@@ -411,16 +386,13 @@ fn extract_packed(input_f: std.fs.File) ![]u8 {
     var good_data = try alloc.alloc(u8, @intCast(len));
     defer alloc.free(good_data);
     var fbs = std.io.fixedBufferStream(good_data);
-    while (true) {
+    main: while (true) {
         const data = blk: {
             var list = std.ArrayList(u8).init(alloc);
             defer list.deinit();
             input.reader().streamUntilDelimiter(list.writer(), '\n', null) catch |err| switch (err) {
                 error.EndOfStream => {
-                    const final_len = try fbs.getPos();
-                    const out_data = try alloc.alloc(u8, final_len);
-                    @memcpy(out_data, good_data[0..final_len]);
-                    return out_data;
+                    break :main;
                 },
                 else => return err,
             };
@@ -429,8 +401,7 @@ fn extract_packed(input_f: std.fs.File) ![]u8 {
         // try input.reader().skipBytes(1, .{});
         defer alloc.free(data);
         if (data.len > 4 and std.mem.startsWith(u8, data, "-- <")) {
-            const ending = data[4] == '/';
-            if (ending) unreachable;
+            std.debug.assert(data[4] != '/');
             var good_tag: ?[]const u8 = null;
             for (whitelist) |tag| {
                 // - start + end
@@ -449,17 +420,27 @@ fn extract_packed(input_f: std.fs.File) ![]u8 {
                 // assumes that line is trimmed, which should be true if i never ever manually touch the file
                 const tag = data[4 .. data.len - 1];
                 try skip_to_end(alloc, input.reader(), null, tag);
-                // todo: don't use parsec
-                const char = parsec.Char(std.fs.File).init('\n');
-                const skip_many = parsec.Many(u8, std.fs.File).init(char.parser());
-                const res2 = try skip_many.parser().parseOrDie(alloc, &input);
-                res2.deinit();
+
+                newlines: while (true) {
+                    const next = input.reader().readByte() catch |err| switch (err) {
+                        error.EndOfStream => break :main,
+                        else => return err,
+                    };
+                    if (next != '\n') {
+                        try input.seekBy(-1);
+                        break :newlines;
+                    }
+                }
             }
         } else {
             try fbs.writer().writeAll(data);
             try fbs.writer().writeByte('\n');
         }
     }
+    const final_len = try fbs.getPos();
+    const out_data = try alloc.alloc(u8, final_len);
+    @memcpy(out_data, good_data[0..final_len]);
+    return out_data;
 }
 
 const SWEETIE_PALETTE = [16]tatl.RGBA{

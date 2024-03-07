@@ -16,7 +16,6 @@ pub fn build(b: *std.Build) !void {
     });
     const s2s_runtime_dep = b.dependency("s2s", .{ .target = target, .optimize = optimize });
     const s2s_native_dep = b.dependency("s2s", .{ .target = native_target, .optimize = optimize_native });
-    const parsec_dep = b.dependency("parsec", .{ .target = native_target, .optimize = optimize_native });
     const tatl_dep = b.dependency("tatl", .{});
     const common_mod = b.addModule("common", .{ .root_source_file = .{ .path = "common/lib.zig" } });
     const exe = b.addExecutable(.{
@@ -36,7 +35,6 @@ pub fn build(b: *std.Build) !void {
 
     converter.root_module.addImport("s2s", s2s_native_dep.module("s2s"));
     converter.root_module.addImport("common", common_mod);
-    converter.root_module.addImport("parsec", parsec_dep.module("parsec"));
     converter.root_module.addImport("tatl", tatl_dep.module("tatl"));
     const pack_files = b.addRunArtifact(converter);
     pack_files.addArg("pack");
