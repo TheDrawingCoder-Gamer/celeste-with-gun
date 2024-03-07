@@ -370,6 +370,40 @@ fn strip_maps(input: std.fs.File) ![]u8 {
     return out;
 }
 
+fn skip_to_end(allocator: std.mem.Allocator, input: anytype, a_output: anytype, tag: []const u8) !void {
+    const GoodOutType = switch (@typeInfo(@TypeOf(a_output))) {
+        .Optional => @TypeOf(a_output),
+        .Null => ?void,
+        else => ?@TypeOf(a_output),
+    };
+    // LOL
+    const output: GoodOutType = a_output;
+    if (output) |it| {
+        const start_tag = try std.fmt.allocPrint(allocator, "-- <{s}>\n", .{tag});
+        defer allocator.free(start_tag);
+        try it.writeAll(start_tag);
+    }
+    const end_tag = try std.fmt.allocPrint(allocator, "-- </{s}>", .{tag});
+    defer allocator.free(end_tag);
+
+    while (true) {
+        const data = blk: {
+            var list = std.ArrayList(u8).init(allocator);
+            defer list.deinit();
+            try input.streamUntilDelimiter(list.writer(), '\n', null);
+            break :blk try list.toOwnedSlice();
+        };
+        defer allocator.free(data);
+        if (output) |it| {
+            try it.writeAll(data);
+            try it.writeByte('\n');
+        }
+        // startsWidth???
+        if (std.mem.startsWith(u8, data, "-- <")) {
+            return;
+        }
+    }
+}
 fn extract_packed(input_f: std.fs.File) ![]u8 {
     var input = input_f;
     const whitelist = [_][]const u8{ "WAVES", "SFX", "PATTERNS", "TRACKS", "PALETTE" };
@@ -394,42 +428,28 @@ fn extract_packed(input_f: std.fs.File) ![]u8 {
         };
         // try input.reader().skipBytes(1, .{});
         defer alloc.free(data);
-        if (data.len > 4 and std.mem.eql(u8, data[0..4], "-- <")) {
+        if (data.len > 4 and std.mem.startsWith(u8, data, "-- <")) {
             const ending = data[4] == '/';
             if (ending) unreachable;
             var good_tag: ?[]const u8 = null;
             for (whitelist) |tag| {
                 // - start + end
                 if (data.len - 5 < tag.len) continue;
-                if (std.mem.eql(u8, tag, data[4 .. 4 + tag.len])) {
+                if (std.mem.startsWith(u8, data[4..], tag)) {
                     good_tag = tag;
                     break;
                 }
             }
             if (good_tag) |_| {
-                try fbs.writer().writeAll(data);
-                try fbs.writer().writeByte('\n');
-
                 // to get any numbers that are tacked on
                 const tag = data[4 .. data.len - 1];
-                const end_tag = try std.fmt.allocPrint(alloc, "-- </{s}>", .{tag});
-                defer alloc.free(end_tag);
-                var end_lit = parsec.Literal(std.fs.File).init(end_tag);
-                var many_til = parsec.ManyTill(u8, []u8, std.fs.File).init(parsec.AnyChar(std.fs.File).parser(), end_lit.parser());
-                const res = try many_til.parser().parseOrDie(alloc, &input);
-                defer res.deinit();
-                try fbs.writer().writeAll(res.value);
-                try fbs.writer().writeAll(end_tag);
+                try skip_to_end(alloc, input.reader(), fbs.writer(), tag);
             } else {
                 // skip section
                 // assumes that line is trimmed, which should be true if i never ever manually touch the file
                 const tag = data[4 .. data.len - 1];
-                const end_tag = try std.fmt.allocPrint(alloc, "-- </{s}>", .{tag});
-                defer alloc.free(end_tag);
-                var end_lit = parsec.Literal(std.fs.File).init(end_tag);
-                var many_til = parsec.ManyTill(u8, []u8, std.fs.File).init(parsec.AnyChar(std.fs.File).parser(), end_lit.parser());
-                const res = try many_til.parser().parseOrDie(alloc, &input);
-                res.deinit();
+                try skip_to_end(alloc, input.reader(), null, tag);
+                // todo: don't use parsec
                 const char = parsec.Char(std.fs.File).init('\n');
                 const skip_many = parsec.Many(u8, std.fs.File).init(char.parser());
                 const res2 = try skip_many.parser().parseOrDie(alloc, &input);
@@ -535,8 +555,7 @@ fn data_at(ase: tatl.AsepriteImport, x: usize, y: usize) !u8 {
 }
 fn get_image_from_cel_or_cry(cel: tatl.Cel) !tatl.ImageCel {
     switch (cel.data) {
-        .raw_image => |c| return c,
-        .compressed_image => |c| return c,
+        .raw_image, .compressed_image => |c| return c,
         else => return error.NotAnImage,
     }
 }
