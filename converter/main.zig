@@ -378,28 +378,41 @@ fn extract_packed(input_f: std.fs.File) ![]u8 {
     defer alloc.free(good_data);
     var fbs = std.io.fixedBufferStream(good_data);
     while (true) {
-        const data = try input.reader().readUntilDelimiterOrEofAlloc(alloc, '\n', 1024) orelse {
-            const final_len = try fbs.getPos();
-            const out_data = try alloc.alloc(u8, final_len);
-            @memcpy(out_data, good_data[0..final_len]);
-            return out_data;
+        const data = blk: {
+            var list = std.ArrayList(u8).init(alloc);
+            defer list.deinit();
+            input.reader().streamUntilDelimiter(list.writer(), '\n', null) catch |err| switch (err) {
+                error.EndOfStream => {
+                    const final_len = try fbs.getPos();
+                    const out_data = try alloc.alloc(u8, final_len);
+                    @memcpy(out_data, good_data[0..final_len]);
+                    return out_data;
+                },
+                else => return err,
+            };
+            break :blk try list.toOwnedSlice();
         };
+        // try input.reader().skipBytes(1, .{});
         defer alloc.free(data);
-        if (std.mem.eql(u8, data[0..5], "-- <")) {
-            const ending = data[5] == '/';
+        if (data.len > 4 and std.mem.eql(u8, data[0..4], "-- <")) {
+            const ending = data[4] == '/';
             if (ending) unreachable;
             var good_tag: ?[]const u8 = null;
-            inline for (whitelist) |tag| {
-                if (std.mem.eql(u8, tag, data[5 .. 5 + tag.len])) {
+            for (whitelist) |tag| {
+                // - start + end
+                if (data.len - 5 < tag.len) continue;
+                if (std.mem.eql(u8, tag, data[4 .. 4 + tag.len])) {
                     good_tag = tag;
                     break;
                 }
             }
-            if (good_tag) |tag| {
+            if (good_tag) |_| {
                 try fbs.writer().writeAll(data);
                 try fbs.writer().writeByte('\n');
 
-                const end_tag = try std.fmt.allocPrint(alloc, "-- </{s}>\n", .{tag});
+                // to get any numbers that are tacked on
+                const tag = data[4 .. data.len - 1];
+                const end_tag = try std.fmt.allocPrint(alloc, "-- </{s}>", .{tag});
                 defer alloc.free(end_tag);
                 var end_lit = parsec.Literal(std.fs.File).init(end_tag);
                 var many_til = parsec.ManyTill(u8, []u8, std.fs.File).init(parsec.AnyChar(std.fs.File).parser(), end_lit.parser());
@@ -410,13 +423,17 @@ fn extract_packed(input_f: std.fs.File) ![]u8 {
             } else {
                 // skip section
                 // assumes that line is trimmed, which should be true if i never ever manually touch the file
-                const tag = data[5 .. data.len - 1];
-                const end_tag = try std.fmt.allocPrint(alloc, "-- </{s}>\n", .{tag});
+                const tag = data[4 .. data.len - 1];
+                const end_tag = try std.fmt.allocPrint(alloc, "-- </{s}>", .{tag});
                 defer alloc.free(end_tag);
                 var end_lit = parsec.Literal(std.fs.File).init(end_tag);
                 var many_til = parsec.ManyTill(u8, []u8, std.fs.File).init(parsec.AnyChar(std.fs.File).parser(), end_lit.parser());
                 const res = try many_til.parser().parseOrDie(alloc, &input);
                 res.deinit();
+                const char = parsec.Char(std.fs.File).init('\n');
+                const skip_many = parsec.Many(u8, std.fs.File).init(char.parser());
+                const res2 = try skip_many.parser().parseOrDie(alloc, &input);
+                res2.deinit();
             }
         } else {
             try fbs.writer().writeAll(data);

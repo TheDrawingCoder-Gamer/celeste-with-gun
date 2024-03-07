@@ -7,8 +7,8 @@
             .url = "https://github.com/ziglibs/s2s/archive/b30205d5e9204899fb6d0fdf28d00ed4d18fe9c9.tar.gz",
         },
         .parsec = .{
-            .url = "https://github.com/TheDrawingCoder-Gamer/zig-parsec/archive/fd693715a8852c81c802366543449046e3274d48.tar.gz",
-            .hash = "1220a893f93a8aa638725f612a2a57e0cc35602f97d42d995ecf68f414d826723ea0",
+            .url = "https://github.com/TheDrawingCoder-Gamer/zig-parsec/archive/0630fb93788aa2781556ab71c50737be61952d2b.tar.gz",
+            .hash = "1220c0d5c214aff48d25046d4cb3ff07915ed01de1e39cb26655f3f44390758404cf",
         },
         .buddy2 = .{
             .url = "https://github.com/TheDrawingCoder-Gamer/zig-buddy2/archive/de81a95ec895714a7d8b1b6197e71df089d2dfba.tar.gz",
