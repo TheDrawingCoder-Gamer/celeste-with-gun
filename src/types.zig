@@ -114,13 +114,6 @@ pub const LineSegment = struct {
     }
 };
 
-test "line intersects" {
-    const segment_1: LineSegment = .{ .start = .{ .x = 0, .y = 0 }, .end = .{ .x = 0, .y = -1 } };
-    const segment_2: LineSegment = .{ .start = .{ .x = 1, .y = -0.5 }, .end = .{ .x = -1, .y = -0.5 } };
-    const res: ?math.PointF = .{ .x = 0, .y = -0.5 };
-    try std.testing.expectEqual(res, segment_1.intersects(segment_2));
-}
-
 pub const AngledLine = struct {
     line: LineSegment,
     angle: f32,

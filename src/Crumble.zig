@@ -7,6 +7,7 @@ const GameState = @import("GameState.zig");
 const Player = @import("Player.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const sheets = @import("sheets.zig");
 
 const vtable: GameObject.VTable = .{ .ptr_draw = &draw, .destroy = &destroy, .get_object = &get_object, .ptr_update = &update, .can_touch = &can_touch, .touch = &touch, .shot = &shot };
 
@@ -21,7 +22,7 @@ fn draw(ctx: *anyopaque) void {
     tdraw.set2bpp();
     // defer as we only draw in 2bpp
     defer tdraw.set4bpp();
-    self.game_object.game_state.draw_spr(800 + @min(@as(i32, @divFloor(self.t_alive, 4)), 4), self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
+    self.game_object.game_state.draw_spr(sheets.crumble.items[@min(@as(usize, @divFloor(self.t_alive, 4)), 4)], self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
 }
 
 fn destroy(ctx: *anyopaque, allocator: Allocator) void {
@@ -70,7 +71,8 @@ fn die(self: *Crumble) void {
     tic.sfx(6, .{ .volume = 6, .duration = 8 });
 }
 
-fn shot(ctx: *anyopaque) void {
+fn shot(ctx: *anyopaque, strength: u8) void {
+    _ = strength;
     die(@alignCast(@ptrCast(ctx)));
 }
 fn touch(ctx: *anyopaque, player: *Player) void {

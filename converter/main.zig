@@ -2,6 +2,8 @@ const std = @import("std");
 const s2s = @import("s2s");
 const SavedLevel = @import("common").Level;
 const math = @import("common").math;
+const tic80_ext = @import("common").ticext;
+const Spritesheet = @import("common").Spritesheet;
 const json = std.json;
 const tatl = @import("tatl");
 
@@ -41,30 +43,16 @@ pub fn main() !void {
         .pack => {
             const respath = args.next() orelse return error.TooFewArgs;
             const unpackedpath = args.next() orelse return error.TooFewArgs;
-            const bpp4path = args.next() orelse return error.TooFewArgs;
-            const bpp2path = args.next() orelse return error.TooFewArgs;
-            const bpp1path = args.next() orelse return error.TooFewArgs;
+            const rootdirpath = args.next() orelse return error.TooFewArgs;
+            const listpath = args.next() orelse return error.TooFewArgs;
             const tilepath = args.next() orelse return error.TooFewArgs;
             const mappath = args.next() orelse return error.TooFewArgs;
 
-            const bpp4ase = blk: {
-                var file = try std.fs.openFileAbsolute(bpp4path, .{});
-                defer file.close();
-                break :blk try tatl.import(alloc, file.reader());
-            };
-            defer bpp4ase.free(alloc);
-            const bpp2ase = blk: {
-                var file = try std.fs.openFileAbsolute(bpp2path, .{});
-                defer file.close();
-                break :blk try tatl.import(alloc, file.reader());
-            };
-            defer bpp2ase.free(alloc);
-            const bpp1ase = blk: {
-                var file = try std.fs.openFileAbsolute(bpp1path, .{});
-                defer file.close();
-                break :blk try tatl.import(alloc, file.reader());
-            };
-            defer bpp1ase.free(alloc);
+            var rootdir = try std.fs.openDirAbsolute(rootdirpath, .{});
+            defer rootdir.close();
+
+            var files = try std.fs.openFileAbsolute(listpath, .{});
+            defer files.close();
             const tilease = blk: {
                 var file = try std.fs.openFileAbsolute(tilepath, .{});
                 defer file.close();
@@ -74,7 +62,7 @@ pub fn main() !void {
 
             const mapfile = try std.fs.openFileAbsolute(mappath, .{ .mode = .read_only });
             defer mapfile.close();
-            const res_data = try ase_packer(bpp4ase, bpp2ase, bpp1ase, tilease);
+            const res_data = try packinator(rootdir, files, tilease);
 
             const in_map_data = try mapfile.readToEndAlloc(alloc, 1024 * 1024);
             const map_data = try get_compressed_map(in_map_data);
@@ -102,6 +90,7 @@ pub fn main() !void {
 
             var map_data_fbs = std.io.fixedBufferStream(&da_map);
             try s2s.serialize(map_data_fbs.writer(), []SavedLevel, map_data.levels);
+            try s2s.serialize(map_data_fbs.writer(), []Spritesheet, res_data.sheets);
             try save_bin_section(resfile.writer(), "MAP7", &da_map, 240, true);
 
             // row size is @sizeOf(tic_tile), which is an 8x8 sprite with 4bpp
@@ -482,23 +471,27 @@ fn nearest_color(color: tatl.RGBA, count: usize) u4 {
     return nearest;
 }
 
-const BitsPerPixel = enum { one, two, four };
-fn color_at(color_depth: tatl.ColorDepth, ase_pallete: tatl.Palette, cel: tatl.ImageCel, x: usize, y: usize) !tatl.RGBA {
+fn color_at(color_depth: tatl.ColorDepth, ase_pallete: tatl.Palette, cel: tatl.Cel, bad_x: usize, bad_y: usize) !tatl.RGBA {
+    const img_cel = try get_image_from_cel_or_cry(cel);
+    const x = @as(isize, @intCast(bad_x)) - @as(isize, cel.x);
+    const y = @as(isize, @intCast(bad_y)) - @as(isize, cel.y);
+    if (x < 0 or y < 0) return error.OutsideCel;
+    if (x >= img_cel.width or y >= img_cel.height) return error.OutsideCel;
     switch (color_depth) {
         .grayscale => return error.NoGrayscale,
         .rgba => {
-            const idx = (y * cel.width + x) * 4;
-            const r = cel.pixels[idx];
-            const g = cel.pixels[idx + 1];
-            const b = cel.pixels[idx + 2];
-            const a = cel.pixels[idx + 3];
+            const idx: usize = @intCast((y * img_cel.width + x) * 4);
+            const r = img_cel.pixels[idx];
+            const g = img_cel.pixels[idx + 1];
+            const b = img_cel.pixels[idx + 2];
+            const a = img_cel.pixels[idx + 3];
 
             return .{ .r = r, .g = g, .b = b, .a = a };
         },
         .indexed => {
-            const idx = y * cel.width + x;
+            const idx: usize = @intCast(y * img_cel.width + x);
 
-            const pix = cel.pixels[idx];
+            const pix = img_cel.pixels[idx];
             const color = ase_pallete.colors[pix];
 
             return color;
@@ -506,27 +499,77 @@ fn color_at(color_depth: tatl.ColorDepth, ase_pallete: tatl.Palette, cel: tatl.I
     }
 }
 
-fn pal_color_at(color_depth: tatl.ColorDepth, ase_palette: tatl.Palette, cel: tatl.ImageCel, x: usize, y: usize, bpp: BitsPerPixel) !u4 {
-    const col_at = try color_at(color_depth, ase_palette, cel, x, y);
+fn pal_color_at(color_depth: tatl.ColorDepth, ase_palette: tatl.Palette, cel: tatl.Cel, x: usize, y: usize, bpp: tic80_ext.Bpp) !u4 {
+    const col_at = color_at(color_depth, ase_palette, cel, x, y) catch |err| switch (err) {
+        error.OutsideCel => return 0,
+        else => return err,
+    };
     const bpp_num: usize = switch (bpp) {
         .one => 2,
         .two => 4,
         .four => 16,
+        _ => unreachable,
     };
     return nearest_color(col_at, bpp_num);
 }
 
+const TouchedTiles = struct {
+    pub const TouchedTilesSet = std.StaticBitSet(16 * 4 * 16);
+    data: TouchedTilesSet,
+
+    // Because touched tiles is meant to be sensitive, this or's the results together
+    pub fn get(self: *TouchedTiles, x: usize, y: usize, bpp: tic80_ext.Bpp) bool {
+        const good_y = y * SHEET_HEIGHT * 4;
+        switch (bpp) {
+            .one => return self.data.isSet(good_y + x),
+            .two => return self.data.isSet(good_y + x * 2) or self.data.isSet(good_y + x * 2 + 1),
+            .four => {
+                const good_x = x * 4;
+                return self.data.isSet(good_y + good_x) or self.data.isSet(good_y + good_x + 1) or self.data.isSet(good_y + good_x + 2) or self.data.isSet(good_y + good_x + 3);
+            },
+            _ => unreachable,
+        }
+    }
+    pub fn setValue(self: *TouchedTiles, x: usize, y: usize, value: bool, bpp: tic80_ext.Bpp) void {
+        const good_y = y * SHEET_HEIGHT * 4;
+        switch (bpp) {
+            .one => self.data.setValue(good_y + x, value),
+            .two => {
+                const good_x = x * 2;
+                self.data.setValue(good_y + good_x, value);
+                self.data.setValue(good_y + good_x + 1, value);
+            },
+            .four => {
+                const good_x = x * 4;
+                self.data.setValue(good_y + good_x, value);
+                self.data.setValue(good_y + good_x + 1, value);
+                self.data.setValue(good_y + good_x + 2, value);
+                self.data.setValue(good_y + good_x + 3, value);
+            },
+            _ => unreachable,
+        }
+    }
+    pub fn set(self: *TouchedTiles, x: usize, y: usize, bpp: tic80_ext.Bpp) void {
+        self.setValue(x, y, true, bpp);
+    }
+    pub fn init() TouchedTiles {
+        return TouchedTiles{ .data = TouchedTilesSet.initEmpty() };
+    }
+};
 const PackedTilesheet = std.PackedIntArrayEndian(u4, .little, 128 * 128);
 const PackedResult = struct {
     sprites: PackedTilesheet,
     tiles: PackedTilesheet,
     flags: [16 * 16 * 2]u8,
+    sheets: []Spritesheet,
 };
 fn data_at(ase: tatl.AsepriteImport, x: usize, y: usize) !u8 {
     for (ase.slices) |slice| {
-        if (slice.user_data.text.len == 0) continue;
+        if (slice.user_data.text.len == 0) {
+            continue;
+        }
         for (slice.keys) |key| {
-            if (key.x <= x and key.x + @as(i32, @intCast(key.width)) >= x and key.y <= y and key.y + @as(i32, @intCast(key.height)) >= y) {
+            if (key.x <= x and key.x + @as(i32, @intCast(key.width)) > x and key.y <= y and key.y + @as(i32, @intCast(key.height)) > y) {
                 return std.fmt.parseInt(u8, slice.user_data.text, 0);
             }
         }
@@ -540,77 +583,105 @@ fn get_image_from_cel_or_cry(cel: tatl.Cel) !tatl.ImageCel {
         else => return error.NotAnImage,
     }
 }
-fn ase_packer(bpp4: tatl.AsepriteImport, bpp2: tatl.AsepriteImport, bpp1: tatl.AsepriteImport, tiles: tatl.AsepriteImport) !PackedResult {
-    var sprite_data = PackedTilesheet.initAllTo(0);
-    {
-        const img = try get_image_from_cel_or_cry(bpp4.frames[0].cels[0]);
-        for (0..16) |i| {
-            for (0..16) |j| {
-                for (0..8) |ii| {
-                    for (0..8) |jj| {
-                        const x = i * 8 + ii;
-                        const y = j * 8 + jj;
-                        const col = try pal_color_at(bpp4.color_depth, bpp4.palette, img, x, y, .four);
-                        // initial offset + new offset
-                        sprite_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
-                    }
-                }
-            }
-        }
-    }
-    {
-        const img = try get_image_from_cel_or_cry(bpp2.frames[0].cels[0]);
-        for (0..16) |i| {
-            for (0..16) |j| {
-                for (0..8) |ii| {
-                    for (0..8) |jj| {
-                        const x = i * 8 + ii;
-                        const sx = x * 2;
-                        const y = j * 8 + jj;
-                        const col1 = try pal_color_at(bpp2.color_depth, bpp2.palette, img, sx, y, .two);
-                        const col2 = try pal_color_at(bpp2.color_depth, bpp2.palette, img, sx + 1, y, .two);
-                        const col = (col2 << 2) + col1;
-                        if (col != 0) {
-                            sprite_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    {
-        const img = try get_image_from_cel_or_cry(bpp1.frames[0].cels[0]);
-        for (0..16) |i| {
-            for (0..16) |j| {
-                for (0..8) |ii| {
-                    for (0..8) |jj| {
-                        const x = (i * 8) + ii;
-                        const sx = x * 4;
-                        const y = j * 8 + jj;
-                        const col1 = try pal_color_at(bpp1.color_depth, bpp1.palette, img, sx, y, .one);
-                        const col2 = try pal_color_at(bpp1.color_depth, bpp1.palette, img, sx + 1, y, .one);
-                        const col3 = try pal_color_at(bpp1.color_depth, bpp1.palette, img, sx + 2, y, .one);
-                        const col4 = try pal_color_at(bpp1.color_depth, bpp1.palette, img, sx + 3, y, .one);
-                        const col = (col4 << 3) + (col3 << 2) + (col2 << 1) + col1;
-                        if (col != 0) {
-                            sprite_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
-                        }
-                    }
-                }
-            }
-        }
-    }
 
+// god hates us all
+fn pixel_pos_to_tic80_index(x: usize, y: usize) usize {
+    const tile_x = @divFloor(x, 8);
+    const tile_y = @divFloor(y, 8);
+    const offset_x = x % 8;
+    const offset_y = y % 8;
+
+    const idx = (tile_y * SHEET_HEIGHT + tile_x) * PIXELS_IN_SPR + (offset_y * 8 + offset_x);
+    return idx;
+}
+const SHEET_HEIGHT = 16;
+fn pack_ase(bpp: tic80_ext.Bpp, ase: tatl.AsepriteImport, sprite_sheet: *PackedTilesheet, touched: *TouchedTiles) !Spritesheet {
+    std.debug.assert(ase.width % 8 == 0);
+    std.debug.assert(ase.height % 8 == 0);
+    const t_width = @divFloor(ase.width, 8);
+    const t_height = @divFloor(ase.height, 8);
+    const bpp_multiplier: u16 = @as(u16, bpp.getMultiplier());
+    const sheet_width: u16 = 16 * bpp_multiplier;
+    const x_samples: usize = @intCast(@divFloor(ase.width, bpp_multiplier));
+    const y_samples: usize = ase.height;
+    const sheet = Spritesheet{ .items = try alloc.alloc(u16, ase.frames.len), .tile_w = @divFloor(ase.width, 8), .tile_h = @divFloor(ase.height, 8), .bpp = bpp };
+    var real_tile: usize = 0;
+    for (ase.frames, 0..) |frame, item_n| {
+        // find next free position
+        y: for (0..SHEET_HEIGHT) |y| {
+            if (y + t_height > SHEET_HEIGHT) continue :y;
+            x: for (0..@as(usize, @intCast(sheet_width))) |x| {
+                if (x + t_width > sheet_width) continue :x;
+                const valid =
+                    valid: for (0..t_width) |i|
+                {
+                    for (0..t_height) |j| {
+                        if (touched.get(x + i, y + j, bpp)) {
+                            break :valid false;
+                        }
+                    }
+                } else true;
+                if (valid) {
+                    real_tile = y * sheet_width + x;
+                    break :y;
+                }
+            }
+        } else return error.TooManySprites;
+
+        const cel = frame.cels[0];
+        const cur_x = real_tile % sheet_width;
+        const pixel_cur_x = blk: {
+            const root = @divFloor(cur_x * 8, bpp_multiplier);
+            break :blk root;
+        };
+        const cur_y = @divFloor(real_tile, sheet_width);
+        const pixel_cur_y = cur_y * 8;
+        sheet.items[item_n] = @intCast(256 * bpp_multiplier + real_tile);
+        for (0..x_samples) |i| {
+            const x = i * bpp_multiplier;
+            for (0..y_samples) |y| {
+                const col = switch (bpp) {
+                    .four => try pal_color_at(ase.color_depth, ase.palette, cel, x, y, .four),
+                    .two => blk: {
+                        const col1 = try pal_color_at(ase.color_depth, ase.palette, cel, x, y, .two);
+                        const col2 = try pal_color_at(ase.color_depth, ase.palette, cel, x + 1, y, .two);
+                        break :blk (col2 << 2) + col1;
+                    },
+                    .one => blk: {
+                        const col1 = try pal_color_at(ase.color_depth, ase.palette, cel, x, y, .one);
+                        const col2 = try pal_color_at(ase.color_depth, ase.palette, cel, x + 1, y, .one);
+                        const col3 = try pal_color_at(ase.color_depth, ase.palette, cel, x + 2, y, .one);
+                        const col4 = try pal_color_at(ase.color_depth, ase.palette, cel, x + 3, y, .one);
+                        break :blk (col4 << 3) + (col3 << 2) + (col2 << 1) + col1;
+                    },
+                    _ => unreachable,
+                };
+
+                const pixel_y = pixel_cur_y + y;
+                const pixel_x = pixel_cur_x + i;
+                sprite_sheet.set(pixel_pos_to_tic80_index(pixel_x, pixel_y), col);
+            }
+        }
+        for (cur_x..cur_x + t_width) |x| {
+            for (cur_y..cur_y + t_height) |y| {
+                touched.set(x, y, bpp);
+            }
+        }
+    }
+    return sheet;
+}
+
+fn packinator(root_dir: std.fs.Dir, in_file: std.fs.File, tiles: tatl.AsepriteImport) !PackedResult {
     var tile_data = PackedTilesheet.initAllTo(0);
     {
-        const img = try get_image_from_cel_or_cry(tiles.frames[0].cels[0]);
+        const cel = tiles.frames[0].cels[0];
         for (0..16) |i| {
             for (0..16) |j| {
                 for (0..8) |ii| {
                     for (0..8) |jj| {
                         const x = (i * 8) + ii;
                         const y = (j * 8) + jj;
-                        const col = try pal_color_at(tiles.color_depth, tiles.palette, img, x, y, .four);
+                        const col = try pal_color_at(tiles.color_depth, tiles.palette, cel, x, y, .four);
                         tile_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
                     }
                 }
@@ -625,6 +696,36 @@ fn ase_packer(bpp4: tatl.AsepriteImport, bpp2: tatl.AsepriteImport, bpp1: tatl.A
             flags[y * 16 + x] = data;
         }
     }
+    var sprite_data = PackedTilesheet.initAllTo(0);
+    var touched = TouchedTiles.init();
+    var sheets = std.ArrayList(Spritesheet).init(alloc);
+    defer sheets.deinit();
+    {
+        const data = try in_file.readToEndAlloc(alloc, 65536);
+        defer alloc.free(data);
+        // TODO: test more
+        var iterator = std.mem.splitSequence(u8, data, "\n");
+        while (iterator.next()) |it| {
+            const ase = blk: {
+                var file = root_dir.openFile(it, .{}) catch |err| switch (err) {
+                    error.FileNotFound => {
+                        continue;
+                    },
+                    else => return err,
+                };
+                defer file.close();
+                break :blk try tatl.import(alloc, file.reader());
+            };
+            defer ase.free(alloc);
+            const bpp: tic80_ext.Bpp = switch (std.fmt.parseInt(u4, ase.sprite_userdata.text, 10) catch 4) {
+                1 => .one,
+                2 => .two,
+                4 => .four,
+                else => return error.InvalidFile,
+            };
+            try sheets.append(try pack_ase(bpp, ase, &sprite_data, &touched));
+        }
+    }
 
-    return .{ .sprites = sprite_data, .tiles = tile_data, .flags = flags };
+    return .{ .sprites = sprite_data, .tiles = tile_data, .flags = flags, .sheets = try sheets.toOwnedSlice() };
 }

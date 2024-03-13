@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 const tic = @import("common").tic;
 const tdraw = @import("draw.zig");
 const types = @import("types.zig");
+const sheets = @import("sheets.zig");
 
 const vtable: GameObject.VTable = .{ .destroy = &destroy, .ptr_draw = &draw, .ptr_update = &GameObject.noUpdate, .get_object = &get_object };
 
@@ -69,13 +70,14 @@ fn destroy(self: *anyopaque, allocator: Allocator) void {
 fn draw(ctx: *anyopaque) void {
     const self: *Spike = @alignCast(@ptrCast(ctx));
     var i: u31 = 0;
+    const spr = sheets.spikes.items[0];
     while (i < self.length) : (i += 1) {
         switch (self.direction) {
             .up, .down => {
-                self.game_object.game_state.draw_spr(290, self.game_object.x + i * 8, self.game_object.y, .{ .rotate = self.rotate, .transparent = &.{0} });
+                self.game_object.game_state.draw_spr(spr, self.game_object.x + i * 8, self.game_object.y, .{ .rotate = self.rotate, .transparent = &.{0} });
             },
             .left, .right => {
-                self.game_object.game_state.draw_spr(290, self.game_object.x, self.game_object.y + i * 8, .{ .rotate = self.rotate, .transparent = &.{0} });
+                self.game_object.game_state.draw_spr(spr, self.game_object.x, self.game_object.y + i * 8, .{ .rotate = self.rotate, .transparent = &.{0} });
             },
         }
     }

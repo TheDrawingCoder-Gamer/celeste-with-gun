@@ -5,16 +5,17 @@ const GameState = @import("GameState.zig");
 const std = @import("std");
 const Player = @import("Player.zig");
 const Allocator = std.mem.Allocator;
+const sheets = @import("sheets.zig");
 
 const vtable: GameObject.VTable = .{ .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .can_touch = &can_touch, .touch = &touch, .shot = &shot };
 const shot_vtable: GameObject.VTable = .{ .ptr_draw = @ptrCast(&draw_shotonly), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .shot = &shot };
 pub fn draw(self: *GameObject) void {
-    self.game_state.draw_spr(272, self.x, self.y, .{ .w = 2, .h = 2, .transparent = &.{0} });
+    self.game_state.draw_spr(sheets.destructible.items[0], self.x, self.y, .{ .w = 2, .h = 2, .transparent = &.{0} });
 }
 fn draw_shotonly(self: *GameObject) void {
     tdraw.set2bpp();
     tic.PALETTE_MAP.color3 = 12;
-    self.game_state.draw_spr(966, self.x, self.y, .{ .w = 2, .h = 2, .transparent = &.{0} });
+    self.game_state.draw_spr(sheets.destructible_gun.items[0], self.x, self.y, .{ .w = 2, .h = 2, .transparent = &.{0} });
     tdraw.set4bpp();
     tdraw.reset_pallete();
 }
@@ -49,7 +50,8 @@ fn die(self: *GameObject) void {
     tic.sfx(6, .{ .duration = 10, .volume = 6 });
 }
 
-fn shot(ctx: *anyopaque) void {
+fn shot(ctx: *anyopaque, strength: u8) void {
+    _ = strength;
     die(@alignCast(@ptrCast(ctx)));
 }
 

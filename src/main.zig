@@ -9,6 +9,7 @@ const Buddy2Allocator = @import("buddy2").Buddy2Allocator(.{});
 const s2s = @import("s2s");
 const Level = @import("Level.zig");
 const Audio = @import("Audio.zig");
+const sheets = @import("sheets.zig");
 
 var buffer: [65536]u8 = undefined;
 var game_state: GameState = undefined;
@@ -30,6 +31,22 @@ export fn BOOT() void {
     var fb = std.io.fixedBufferStream(tic.MAP);
     Level.rooms = s2s.deserializeAlloc(fb.reader(), []SavedLevel, allocator) catch unreachable;
     Level.from_saved(&Level.rooms[0], &game_state).start() catch unreachable;
+    const data = s2s.deserializeAlloc(fb.reader(), []common.Spritesheet, allocator) catch unreachable;
+    defer allocator.free(data);
+    sheets.bullet = data[0];
+    sheets.checkpoint = data[1];
+    sheets.crumble = data[2];
+    sheets.dash_crystal = data[3];
+    sheets.destructible = data[4];
+    sheets.destructible_gun = data[5];
+    sheets.innergear = data[6];
+    sheets.misc_2bpp = data[7];
+    sheets.misc_4bpp = data[8];
+    sheets.outergear = data[9];
+    sheets.player = data[10];
+    sheets.shield_icons = data[11];
+    sheets.shotgun_blast = data[12];
+    sheets.spikes = data[13];
     //for (Audio.music_patterns, 0..) |pattern, i| {
     //    tic.tracef("{d}, {any}", .{ i, pattern.get(0) });
     //}

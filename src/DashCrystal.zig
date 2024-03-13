@@ -6,6 +6,7 @@ const GameState = @import("GameState.zig");
 const Player = @import("Player.zig");
 const tic = @import("common").tic;
 const tdraw = @import("draw.zig");
+const sheets = @import("sheets.zig");
 
 const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .can_touch = &GameObject.yesCanTouch, .get_object = @ptrCast(&dash_obj.get_object), .destroy = @ptrCast(&dash_obj.destroy), .touch = @ptrCast(&touch) };
 game_object: GameObject,
@@ -53,14 +54,12 @@ fn dash_crystal_palette(dashes: u8) void {
     tic.PALETTE_MAP.color3 = dash_pal[1];
 }
 fn dash_sprite(exists: bool, dashes: u8) i32 {
-    const res: struct { i32, i32 } = switch (dashes) {
-        1 => .{ 805, 806 },
-        2 => .{ 807, 808 },
-        3 => .{ 809, 810 },
-        4 => .{ 811, 812 },
-        else => .{ 773, 774 },
+    const data: u8 = blk: {
+        const res = dashes * 2;
+        if (res >= 10) break :blk if (exists) 0 else 1;
+        break :blk if (exists) res else res + 1;
     };
-    return if (exists) res[0] else res[1];
+    return sheets.dash_crystal.items[data];
 }
 fn draw(self: *DashCrystal) void {
     tdraw.set2bpp();

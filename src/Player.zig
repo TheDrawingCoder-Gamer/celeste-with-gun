@@ -13,9 +13,10 @@ const Crumble = @import("Crumble.zig");
 const Voice = Audio.Voice;
 const Allocator = std.mem.Allocator;
 const types = @import("types.zig");
+const sheets = @import("sheets.zig");
 
 const State = enum { normal, death, dash, grapple_start, grapple_attach, grapple_pull };
-const Mode = enum { none, dash, grapple };
+const Gun = enum { projectile, shotgun };
 
 pub const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .destroy = @ptrCast(&destroy), .as_rider = &as_rider, .ptr_die = @ptrCast(&die) };
 const rider_vtable: GameObject.IRide.VTable = .{ .riding_platform_check = &riding_platform_check, .riding_platform_set_velocity = &riding_platform_set_velocity };
@@ -34,7 +35,7 @@ var_jump_speed: f32 = 0,
 auto_var_jump: bool = false,
 jump_grace_y: i32 = 0,
 game_object: GameObject,
-spr: i32 = 512,
+spr: usize = 0,
 input: *Input,
 t_shoot_cooldown: u8 = 0,
 allocator: std.mem.Allocator,
@@ -42,7 +43,7 @@ t_fire_pose: u8 = 0,
 fire_dir: Bullet.Direction = .up,
 t_death: u8 = 0,
 voice: *Voice,
-mode: Mode = .dash,
+gun: Gun = .shotgun,
 t_dash_time: u8 = 0,
 dashes: u8 = 1,
 max_dashes: u8 = 1,
@@ -99,7 +100,10 @@ fn approach(x: f32, target: f32, max_delta: f32) f32 {
 }
 fn shoot(self: *Player) void {
     _ = self.input.consume_gun_press();
-    self.shoot_raw(.against);
+    switch (self.gun) {
+        .projectile => self.shoot_raw(.against),
+        .shotgun => {},
+    }
 }
 fn dash_shoot(self: *Player) void {
     _ = self.input.consume_action_press();
@@ -301,7 +305,9 @@ fn dash(self: *Player) void {
     if (self.input.input_y < 0) {
         self.t_jump_grace = 0;
     }
-    self.shoot_dir(x_dir, self.input.input_y, 20);
+    if (self.gun == .projectile) {
+        self.shoot_dir(x_dir, self.input.input_y, 20);
+    }
     self.t_dash_time = 8;
     self.voice.play(4, .{ .volume = 5 });
 }
@@ -419,7 +425,7 @@ pub fn update(self: *Player) void {
                     self.jump();
                 } else if (sliding) {
                     self.wall_jump(-self.input.input_x);
-                } else if (self.t_shoot_cooldown == 0) {
+                } else if (self.t_shoot_cooldown == 0 and self.gun == .projectile) {
                     self.jump_shoot();
                 }
             }
@@ -429,16 +435,10 @@ pub fn update(self: *Player) void {
                 }
             }
             if (self.input.input_action_pressed > 0) {
-                switch (self.mode) {
-                    .grapple => {},
-                    .dash => {
-                        if (self.dashes > 0) {
-                            self.dash();
-                        } else if (self.t_shoot_cooldown == 0) {
-                            self.dash_shoot();
-                        }
-                    },
-                    .none => {},
+                if (self.dashes > 0) {
+                    self.dash();
+                } else if (self.t_shoot_cooldown == 0 and self.gun == .projectile) {
+                    self.dash_shoot();
                 }
             }
         },
@@ -466,7 +466,7 @@ pub fn update(self: *Player) void {
                 self.end_dash();
             }
 
-            if (self.input.input_action_pressed > 0 and self.dashes == 0) {
+            if (self.input.input_action_pressed > 0 and self.dashes == 0 and self.gun == .projectile) {
                 self.dash_shoot();
             }
         },
@@ -492,24 +492,24 @@ pub fn update(self: *Player) void {
     self.char_sliding = false;
     self.skull_offset = .{};
     if (self.state == .dash) {
-        self.spr = 538;
+        self.spr = 13;
     } else if (self.t_fire_pose > 0) {
         self.spr = switch (self.fire_dir) {
-            .right, .left => 527,
-            .up_left, .up_right => 530,
-            .down_left, .down_right => 531,
-            .up => 528,
-            .down => 529,
+            .right, .left => 8,
+            .up_left, .up_right => 12,
+            .down_left, .down_right => 13,
+            .up => 9,
+            .down => 11,
         };
     } else if (!on_ground) {
         if (sliding) {
             self.char_sliding = true;
-            self.spr = 522;
+            self.spr = 7;
         } else {
             if (self.game_object.speed_y > 0) {
-                self.spr = 517;
+                self.spr = 6;
             } else {
-                self.spr = 515;
+                self.spr = 5;
             }
         }
     } else {
@@ -518,20 +518,20 @@ pub fn update(self: *Player) void {
         }
         if (self.input.input_x != 0) {
             if (self.crouching) {
-                const frame: i32 = @intCast(@divFloor(self.game_object.game_state.time, 9) % 3);
+                const frame: usize = @intCast(@divFloor(self.game_object.game_state.time, 9) % 2);
                 if (frame == 1) {
                     self.skull_offset.y = 1;
                 }
-                self.spr = 560 + frame;
+                self.spr = 15 + frame;
             } else {
                 const frame = @divFloor(self.game_object.game_state.time, 8);
-                self.spr = 513 + @as(i32, @intCast(frame % 4));
+                self.spr = 1 + @as(usize, @intCast(frame % 4));
             }
         } else {
             if (self.crouching) {
-                self.spr = 560;
+                self.spr = 14;
             } else {
-                self.spr = 512;
+                self.spr = 0;
             }
         }
     }
@@ -772,7 +772,7 @@ pub fn draw(self: *Player) void {
             skull_offset_y = 3;
             skull_offset_y -= self.t_recharge / 3;
         }
-        self.game_object.game_state.draw_spr(553, obj.x, obj.y + skull_offset_y, .{ .flip = facing, .transparent = &.{0} });
+        self.game_object.game_state.draw_spr(sheets.player.items[17], obj.x, obj.y + skull_offset_y, .{ .flip = facing, .transparent = &.{0} });
         return;
     }
     const accel = obj.velocity().minus(self.last_velocity);
@@ -791,10 +791,10 @@ pub fn draw(self: *Player) void {
         clamp_mag_high(@as(i32, @intFromFloat(-self.follow_thru_accel.y)), 2)
     else
         0;
-    self.game_object.game_state.draw_spr(553, obj.x, obj.y + skull_offset_y, .{ .flip = facing, .transparent = &.{0} });
+    self.game_object.game_state.draw_spr(sheets.player.items[17], obj.x, obj.y + skull_offset_y, .{ .flip = facing, .transparent = &.{0} });
 
     // _ = tic80.vbank(1);
-    self.game_object.game_state.draw_spr(self.spr, obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
+    self.game_object.game_state.draw_spr(sheets.player.items[self.spr], obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
 }
 

@@ -8,6 +8,7 @@ const types = @import("types.zig");
 const std = @import("std");
 const Solid = @import("Solid.zig");
 const tdraw = @import("draw.zig");
+const sheets = @import("sheets.zig");
 
 const vtable: GameObject.VTable = .{ .destroy = &destroy, .can_touch = &can_touch, .touch = &touch, .ptr_draw = &draw, .ptr_update = &update, .get_object = &get_object };
 
@@ -181,8 +182,8 @@ fn draw_chain(self: *TrafficBlock) void {
     tic.PALETTE_MAP.color1 = 8;
     tic.PALETTE_MAP.color2 = 14;
 
-    const gear_frame: i32 = @intFromFloat(self.gear_frame);
-    const frame = 962 + gear_frame;
+    const gear_frame: usize = @intFromFloat(self.gear_frame);
+    const frame = sheets.outergear.items[gear_frame];
     tic.spr(frame, start_x, start_y, .{
         .transparent = &.{0},
     });
@@ -203,9 +204,9 @@ fn draw(ctx: *anyopaque) void {
     tdraw.set2bpp();
     tic.clip(x, y, self.width * 8, self.height * 8);
     {
-        const gear_frame: i32 = @intFromFloat(self.gear_frame);
-        const clockwise_frame: i32 = gear_frame + 992;
-        const counter_frame: i32 = 995 - gear_frame;
+        const gear_frame: usize = @intFromFloat(self.gear_frame);
+        const clockwise_frame = sheets.innergear.items[gear_frame];
+        const counter_frame = sheets.innergear.items[3 - gear_frame];
 
         tic.PALETTE_MAP.color1 = 13;
         tic.PALETTE_MAP.color2 = 14;
@@ -228,15 +229,15 @@ fn draw(ctx: *anyopaque) void {
     tdraw.set4bpp();
     tdraw.reset_pallete();
     tic.PALETTE_MAP.color1 = 0;
-    tic.spr(420, x, y, .{ .transparent = &.{0} });
-    tic.spr(420, x + (self.width - 1) * 8, y, .{ .transparent = &.{0}, .flip = .horizontal });
+    tic.spr(sheets.misc_4bpp.items[1], x, y, .{ .transparent = &.{0} });
+    tic.spr(sheets.misc_4bpp.items[1], x + (self.width - 1) * 8, y, .{ .transparent = &.{0}, .flip = .horizontal });
 
     tdraw.set2bpp();
     tic.PALETTE_MAP.color1 = 15;
     tic.PALETTE_MAP.color2 = 14;
     tic.PALETTE_MAP.color3 = 0;
-    tic.spr(865, x + (self.width - 1) * 8, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by180 });
-    tic.spr(865, x, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by270 });
+    tic.spr(sheets.misc_2bpp.items[1], x + (self.width - 1) * 8, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by180 });
+    tic.spr(sheets.misc_2bpp.items[1], x, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by270 });
 
     var point = x + @divFloor(self.width, 2) * 8;
     // if even
@@ -253,7 +254,7 @@ fn draw(ctx: *anyopaque) void {
         .advancing => 6,
         .retreating, .stalled => 4,
     };
-    tic.spr(434, point, y, .{ .transparent = &.{1} });
+    tic.spr(sheets.misc_4bpp.items[0], point, y, .{ .transparent = &.{1} });
     tic.noclip();
 }
 

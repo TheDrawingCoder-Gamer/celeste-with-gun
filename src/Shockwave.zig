@@ -8,12 +8,14 @@ const Allocator = std.mem.Allocator;
 const tic = @import("common").tic;
 const tdraw = @import("draw.zig");
 const types = @import("types.zig");
+const sheets = @import("sheets.zig");
 
 var amount: u8 = 0;
+pub const SHOCKWAVE_STRENGTH = 10;
 
 const Direction = types.CardinalDir;
 
-const vtable: GameObject.VTable = .{ .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .ptr_update = @ptrCast(&update), .destroy = @ptrCast(&destroy) };
+const vtable: GameObject.VTable = .{ .ptr_draw = &draw, .get_object = @ptrCast(&get_object), .ptr_update = @ptrCast(&update), .destroy = @ptrCast(&destroy) };
 player: u2,
 game_object: GameObject,
 direction: Direction,
@@ -22,10 +24,11 @@ flip: tic.Flip,
 rotation: tic.Rotate,
 ttl: i32,
 
-pub fn draw(self: *Shockwave) void {
+fn draw(ctx: *anyopaque) void {
+    const self: *Shockwave = @alignCast(@ptrCast(ctx));
     Player.pallete(self.player);
     tdraw.set2bpp();
-    self.game_object.game_state.draw_spr(618, self.game_object.x, self.game_object.y, .{ .transparent = &.{0}, .rotate = self.rotation, .flip = self.flip });
+    self.game_object.game_state.draw_spr(sheets.bullet.items[2], self.game_object.x, self.game_object.y, .{ .transparent = &.{0}, .rotate = self.rotation, .flip = self.flip });
     Player.reset_pallete();
     tdraw.set4bpp();
 }
@@ -36,7 +39,7 @@ fn die_on_collide(self: *Shockwave, moved: i32, target: i32) bool {
     const item = self.game_object.first_overlap(self.direction.x(), self.direction.y());
     if (item) |obj| {
         if (obj.obj().shootable) {
-            obj.shot();
+            obj.shot(SHOCKWAVE_STRENGTH);
         }
     }
     self.game_object.destroyed = true;
@@ -66,7 +69,7 @@ pub fn update(self: *Shockwave) void {
             var obj = node.data;
             const gameobj = obj.obj();
             if (gameobj.shootable and !gameobj.destroyed and self.game_object.hurtboxes_touch(obj, 0, 0)) {
-                obj.shot();
+                obj.shot(SHOCKWAVE_STRENGTH);
                 self.game_object.destroyed = true;
                 return;
             }

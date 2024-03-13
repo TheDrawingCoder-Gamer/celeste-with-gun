@@ -38,8 +38,8 @@ pub const IsGameObject = struct {
     pub fn can_touch(self: *const IsGameObject, player: *Player) bool {
         return self.table.can_touch(self.ptr, player);
     }
-    pub fn shot(self: *const IsGameObject) void {
-        self.table.shot(self.ptr);
+    pub fn shot(self: *const IsGameObject, strength: u8) void {
+        self.table.shot(self.ptr, strength);
     }
     pub fn as_rider(self: *const IsGameObject) ?IRide {
         if (self.table.as_rider) |ride_it| {
@@ -63,7 +63,7 @@ pub const VTable = struct {
     destroy: *const fn (self: *anyopaque, allocator: std.mem.Allocator) void,
     touch: *const fn (self: *anyopaque, player: *Player) void = &GameObject.noTouch,
     can_touch: *const fn (self: *anyopaque, player: *Player) bool = &GameObject.noCanTouch,
-    shot: *const fn (self: *anyopaque) void = &noShot,
+    shot: *const fn (self: *anyopaque, strength: u8) void = &noShot,
     as_rider: ?*const fn (self: *anyopaque) IRide = null,
     squish: ?*const fn (self: *anyopaque) void = null,
     pub fn move_x(self: *const VTable, item: *anyopaque, x: f32, on_collide: ?*const fn (*anyopaque, moved: i32, target: i32) bool) bool {
@@ -312,7 +312,10 @@ pub fn generic_object(comptime T: type) type {
     };
 }
 pub const noDraw = noUpdate;
-pub const noShot = noUpdate;
+pub fn noShot(ctx: *anyopaque, strength: u8) void {
+    _ = ctx;
+    _ = strength;
+}
 pub fn debug_draw_hitbox(self: *GameObject) void {
     tic80.rectb(self.x + self.hit_x - self.game_state.camera_x, self.y + self.hit_y - self.game_state.camera_y, self.hit_w, self.hit_h, 1);
 }

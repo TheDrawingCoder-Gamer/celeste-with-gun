@@ -8,6 +8,7 @@ const tdraw = @import("draw.zig");
 const tic = @import("common").tic;
 const Voice = @import("Audio.zig").Voice;
 const Player = @import("Player.zig");
+const sheets = @import("sheets.zig");
 
 pub const vtable: GameObject.VTable = .{ .ptr_draw = &draw, .get_object = &get_object, .destroy = &destroy, .ptr_update = &update, .touch = &touch, .can_touch = &can_touch };
 
@@ -61,14 +62,14 @@ fn draw(ptr: *anyopaque) void {
     const current = self.t_flag_anim >= 3;
     palette(current);
 
-    const spr: i32 =
+    const spr: usize =
         switch (self.t_flag_anim / 2) {
-        1, 4 => 305,
-        2, 3 => 306,
-        5 => 307,
-        else => 304,
+        1, 4 => 1,
+        2, 3 => 2,
+        5 => 3,
+        else => 0,
     };
-    self.game_object.game_state.draw_spr(spr, self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
+    self.game_object.game_state.draw_spr(sheets.checkpoint.items[spr], self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
 }
 
 fn destroy(ptr: *anyopaque, allocator: Allocator) void {

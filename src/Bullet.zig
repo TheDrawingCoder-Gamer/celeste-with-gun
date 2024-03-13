@@ -7,6 +7,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const tic = @import("common").tic;
 const tdraw = @import("draw.zig");
+const sheets = @import("sheets.zig");
 
 var amount: u8 = 0;
 
@@ -58,7 +59,7 @@ fn die_on_collide(self: *Bullet, moved: i32, target: i32) bool {
     const item = self.game_object.first_overlap(self.direction.axis_x(), self.direction.axis_y());
     if (item) |obj| {
         if (obj.obj().shootable) {
-            obj.shot();
+            obj.shot(50);
         }
     }
     self.game_object.destroyed = true;
@@ -83,7 +84,7 @@ pub fn update(self: *Bullet) void {
             var obj = node.data;
             const gameobj = obj.obj();
             if (gameobj.shootable and !gameobj.destroyed and self.game_object.hurtboxes_touch(obj, 0, 0)) {
-                obj.shot();
+                obj.shot(50);
                 self.game_object.destroyed = true;
                 return;
             }
@@ -115,9 +116,12 @@ pub fn create(allocator: std.mem.Allocator, state: *GameState, x: i32, y: i32, p
         .down, .down_right => .by90,
         .left, .down_left => .by180,
     };
-    self.spr = switch (self.direction) {
-        .up, .right, .down, .left => 616,
-        else => 617,
+    self.spr = blk: {
+        const data: u1 = switch (self.direction) {
+            .up, .right, .down, .left => 0,
+            else => 1,
+        };
+        break :blk sheets.bullet.items[data];
     };
     self.ttl = ttl;
 

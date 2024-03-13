@@ -225,3 +225,17 @@ pub fn check_solid_point(self: *GameState, point: types.Point) bool {
 
     return false;
 }
+
+pub fn shot_hitbox(self: *GameState, box: types.Box, strength: u8) void {
+    {
+        var it = self.objects.first;
+        while (it) |node| : (it = node.next) {
+            var obj = node.data;
+            const gameobj = obj.obj();
+            if (gameobj.special_type == .player) continue;
+            if (!gameobj.destroyed and gameobj.world_hurtbox().overlapping(box)) {
+                obj.shot(strength);
+            }
+        }
+    }
+}

@@ -8,6 +8,7 @@ const Player = @import("Player.zig");
 const Allocator = std.mem.Allocator;
 const SwitchDoor = @import("SwitchDoor.zig");
 const tdraw = @import("draw.zig");
+const sheets = @import("sheets.zig");
 
 game_object: GameObject,
 active: bool = false,
@@ -98,7 +99,8 @@ fn touch(ctx: *anyopaque, player: *Player) void {
     self.activated();
 }
 
-fn shot(ctx: *anyopaque) void {
+fn shot(ctx: *anyopaque, strength: u8) void {
+    if (strength <= 10) return;
     const self: *Switch = @alignCast(@ptrCast(ctx));
 
     self.activated();
@@ -118,11 +120,11 @@ fn draw(ctx: *anyopaque) void {
 
     if (self.game_object.touchable) {
         tic.PALETTE_MAP.color1 = if (self.active) 2 else 10;
-        self.game_object.game_state.draw_spr(1540, self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{ .transparent = &.{0} });
+        self.game_object.game_state.draw_spr(sheets.shield_icons.items[0], self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{ .transparent = &.{0} });
     }
 
     if (self.game_object.shootable) {
         tic.PALETTE_MAP.color1 = if (self.active) 1 else 2;
-        self.game_object.game_state.draw_spr(1542, self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{ .transparent = &.{0} });
+        self.game_object.game_state.draw_spr(sheets.shield_icons.items[1], self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{ .transparent = &.{0} });
     }
 }

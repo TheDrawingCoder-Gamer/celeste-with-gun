@@ -1,0 +1,14 @@
+bullet.aseprite
+checkpoint.aseprite
+crumble.aseprite
+dash_crystal.aseprite
+destructible.aseprite
+destructible_gun.aseprite
+innergear.aseprite
+misc_2bpp.aseprite
+misc_4bpp.aseprite
+outergear.aseprite
+player.aseprite
+shield_icons.aseprite
+shotgun_blast.aseprite
+spikes.aseprite

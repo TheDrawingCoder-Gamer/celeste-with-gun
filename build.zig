@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) !void {
         .target = test_target,
     });
     const s2s_runtime_dep = b.dependency("s2s", .{ .target = target, .optimize = optimize });
+    const s2s_test_dep = b.dependency("s2s", .{ .target = test_target, .optimize = optimize_native });
     const s2s_native_dep = b.dependency("s2s", .{ .target = native_target, .optimize = optimize_native });
     const tatl_dep = b.dependency("tatl", .{});
     const common_mod = b.addModule("common", .{ .root_source_file = .{ .path = "common/lib.zig" } });
@@ -40,9 +41,8 @@ pub fn build(b: *std.Build) !void {
     pack_files.addArg("pack");
     const packed_file = pack_files.addOutputFileArg("res.wasmp");
     pack_files.addFileArg(.{ .path = "assets/unpacked_data.wasmp" });
-    pack_files.addFileArg(.{ .path = "assets/sprites_bpp4.aseprite" });
-    pack_files.addFileArg(.{ .path = "assets/sprites_bpp2.aseprite" });
-    pack_files.addFileArg(.{ .path = "assets/sprites_bpp1.aseprite" });
+    pack_files.addDirectoryArg(.{ .path = "assets/sprites" });
+    pack_files.addFileArg(.{ .path = "assets/sprites.txt" });
     pack_files.addFileArg(.{ .path = "assets/tiles.aseprite" });
     pack_files.addFileArg(.{ .path = "assets/maps/map.ldtk" });
 
@@ -61,9 +61,18 @@ pub fn build(b: *std.Build) !void {
         .name = "test",
     });
     tests.root_module.addImport("buddy2", buddy2_test_dep.module("buddy2"));
+    tests.root_module.addImport("common", common_mod);
+    tests.root_module.addImport("s2s", s2s_test_dep.module("s2s"));
+    const common_tests = b.addTest(.{
+        .root_source_file = .{ .path = "common/lib.zig" },
+        .target = native_target,
+        .name = "common_test",
+    });
 
     const run_tests = b.addRunArtifact(tests);
+    const run_common_tests = b.addRunArtifact(common_tests);
     test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&run_common_tests.step);
 
     const unpack_data_step = b.step("unpack_data", "Update assets/unpacked_data.wasmp to use latest data from output file");
     unpack_data_step.dependOn(&unpack_file.step);
