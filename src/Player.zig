@@ -64,6 +64,10 @@ follow_thru_accel: types.PointF = .{},
 t_accel_follow_thru: u8 = 0,
 // Amount of shots that effect momentum midair
 midair_shot_count: u8 = MAX_MIDAIR_SHOT,
+blast_time: u8 = 0,
+blast_pos: types.Point = .{},
+// recharge timer for shots : )
+t_shot_recharge: ?u8 = null,
 
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !*Player {
     var obj = GameObject.create(state, x, y);
@@ -78,6 +82,7 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *I
     obj.persistent = true;
     obj.special_type = .player;
     obj.is_actor = true;
+    obj.facing = 1;
     const self = try allocator.create(Player);
 
     self.* = .{ .game_object = obj, .input = input, .allocator = allocator, .voice = voice };
@@ -102,7 +107,7 @@ fn shoot(self: *Player) void {
     _ = self.input.consume_gun_press();
     switch (self.gun) {
         .projectile => self.shoot_raw(.against),
-        .shotgun => {},
+        .shotgun => self.shotgun_shot(),
     }
 }
 fn dash_shoot(self: *Player) void {
@@ -130,14 +135,44 @@ fn shoot_raw(self: *Player, recoil: RecoilMode) void {
     }
 }
 
+fn shotgun_shot(self: *Player) void {
+    const on_ground = self.game_object.check_solid(0, 1);
+    const x_dir = if (self.input.input_y == 0 and self.input.input_x == 0) self.game_object.facing else self.input.input_x;
+    const dir = types.DigitalDir.as_wind(.{ .x = x_dir, .y = self.input.input_y }) orelse unreachable;
+    // choose bias based on grounded state
+    const based_dir = if (on_ground) dir.cardinal_bias_horz() else dir.cardinal_bias_vert();
+    self.fire_dir = based_dir.as_princible();
+    self.blast_time = 8;
+    const pos = blk: {
+        const x: i32 = if (based_dir.y() != 0) -4 else switch (based_dir.x()) {
+            -1 => -16,
+            1 => 8,
+            else => unreachable,
+        };
+        const y: i32 = if (based_dir.x() != 0) -4 else switch (based_dir.y()) {
+            -1 => -16,
+            1 => 8,
+            else => unreachable,
+        };
+        break :blk types.Point{ .x = x, .y = y };
+    };
+    self.blast_pos = pos;
+    const world_pos = pos.add(.{ .x = self.game_object.x, .y = self.game_object.y });
+    self.game_object.game_state.shot_hitbox(types.Box{ .x = world_pos.x, .y = world_pos.y, .w = 16, .h = 16 }, 100);
+    self.add_shot_momentum_raw(false, 2, 2, based_dir.x(), based_dir.y());
+}
+
 fn add_shot_momentum(self: *Player, x: i2, y: i2) void {
+    self.add_shot_momentum_raw(true, 0.2, 5.0, x, y);
+}
+fn add_shot_momentum_raw(self: *Player, comptime block_downwards: bool, comptime x_mult: f32, comptime y_mult: f32, x: i2, y: i2) void {
     if (self.midair_shot_count == 0) return;
     self.midair_shot_count -= 1;
-    const da_y = if (y < 0) 0 else -y;
+    const da_y = if (y < 0 and block_downwards) 0 else -y;
     const da_x = -x;
 
-    const y_off: f32 = @as(f32, @floatFromInt(da_y)) * 5;
-    const x_off: f32 = @as(f32, @floatFromInt(da_x)) * 0.2;
+    const y_off: f32 = @as(f32, @floatFromInt(da_y)) * y_mult;
+    const x_off: f32 = @as(f32, @floatFromInt(da_x)) * x_mult;
     if (self.game_object.speed_y >= 0) {
         self.game_object.speed_y = y_off;
     } else {
@@ -348,8 +383,13 @@ pub fn update(self: *Player) void {
         self.t_fire_pose -= 1;
     if (self.t_recharge > 0)
         self.t_recharge -= 1;
+    if (self.t_shot_recharge) |*r| {
+        r.* -= 1;
+    }
     if (self.t_platform_velocity_storage > 0)
         self.t_platform_velocity_storage -= 1;
+    if (self.blast_time > 0)
+        self.blast_time -= 1;
     var sliding = false;
     self.last_accel = self.game_object.velocity().minus(self.last_velocity);
     self.last_velocity = self.game_object.velocity();
@@ -399,6 +439,7 @@ pub fn update(self: *Player) void {
             if (!on_ground) {
                 self.recharging = false;
                 self.t_recharge = 0;
+                self.t_shot_recharge = null;
             } else {
                 if (self.dashes < self.max_dashes and self.t_recharge == 0) {
                     if (self.recharging) {
@@ -407,6 +448,16 @@ pub fn update(self: *Player) void {
                     } else {
                         self.recharging = true;
                         self.t_recharge = 6;
+                    }
+                }
+                if (self.midair_shot_count < MAX_MIDAIR_SHOT) {
+                    if (self.t_shot_recharge) |r| {
+                        if (r == 0) {
+                            self.t_shot_recharge = null;
+                            self.midair_shot_count = MAX_MIDAIR_SHOT;
+                        }
+                    } else {
+                        self.t_shot_recharge = 4;
                     }
                 }
             }
@@ -763,7 +814,22 @@ pub fn draw(self: *Player) void {
         // self.game_object.game_state.draw_spr(1280 + (frame * 4), obj.x - 13, obj.y - 13, .{ .transparent = &.{0}, .w = 4, .h = 4 });
         return;
     }
-
+    // blatantly incorrect usage of defer
+    defer if (self.blast_time > 0) {
+        tdraw.set1bpp();
+        tic80.PALETTE_MAP.color1 = if (self.blast_time > 3) 3 else 4;
+        self.game_object.game_state.draw_spr(sheets.shotgun_blast.items[0], obj.x + self.blast_pos.x, obj.y + self.blast_pos.y, .{
+            .rotate = switch (self.fire_dir.cardinal_bias_horz()) {
+                .up => .by270,
+                .down => .by90,
+                .left => .by180,
+                .right => .no,
+            },
+            .transparent = &.{0},
+            .w = 2,
+            .h = 2,
+        });
+    };
     tdraw.set2bpp();
     const facing: tic80.Flip = if ((obj.facing != 1) != (self.char_sliding)) .horizontal else .no;
     if (self.state == .dash or self.dashes == 0) {
@@ -796,6 +862,7 @@ pub fn draw(self: *Player) void {
     // _ = tic80.vbank(1);
     self.game_object.game_state.draw_spr(sheets.player.items[self.spr], obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
     // _ = tic80.vbank(0);
+
 }
 
 fn riding_platform_check(ctx: *anyopaque, platform: GameObject.IsGameObject) bool {

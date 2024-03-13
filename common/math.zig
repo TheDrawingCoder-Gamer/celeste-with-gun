@@ -127,6 +127,31 @@ pub const DigitalDir = struct {
     pub fn as_point(self: DigitalDir) Point {
         return .{ .x = self.x, .y = self.y };
     }
+
+    // returns null if x == 0 and y == 0
+    pub fn as_wind(self: DigitalDir) ?PrincibleWind {
+        return switch (self.x) {
+            -1 => switch (self.y) {
+                -1 => .up_left,
+                0 => .left,
+                1 => .down_left,
+                else => unreachable,
+            },
+            0 => switch (self.y) {
+                -1 => .up,
+                0 => null,
+                1 => .down,
+                else => unreachable,
+            },
+            1 => switch (self.y) {
+                -1 => .up_right,
+                0 => .right,
+                1 => .down_right,
+                else => unreachable,
+            },
+            else => unreachable,
+        };
+    }
 };
 pub const CardinalDir = enum(u2) {
     up,

@@ -8,34 +8,11 @@ const Allocator = std.mem.Allocator;
 const tic = @import("common").tic;
 const tdraw = @import("draw.zig");
 const sheets = @import("sheets.zig");
+const math = @import("common").math;
 
 var amount: u8 = 0;
 
-pub const Direction = enum {
-    up_left,
-    up,
-    up_right,
-    left,
-    right,
-    down_left,
-    down,
-    down_right,
-
-    pub fn axis_x(self: Direction) i2 {
-        return switch (self) {
-            .up, .down => 0,
-            .left, .up_left, .down_left => -1,
-            .right, .up_right, .down_right => 1,
-        };
-    }
-    pub fn axis_y(self: Direction) i2 {
-        return switch (self) {
-            .left, .right => 0,
-            .up, .up_left, .up_right => -1,
-            .down, .down_left, .down_right => 1,
-        };
-    }
-};
+pub const Direction = math.PrincibleWind;
 
 const vtable: GameObject.VTable = .{ .ptr_draw = @ptrCast(&draw), .get_object = @ptrCast(&get_object), .ptr_update = @ptrCast(&update), .destroy = @ptrCast(&destroy) };
 player: u2,
@@ -56,7 +33,7 @@ pub fn draw(self: *Bullet) void {
 fn die_on_collide(self: *Bullet, moved: i32, target: i32) bool {
     _ = moved;
     _ = target;
-    const item = self.game_object.first_overlap(self.direction.axis_x(), self.direction.axis_y());
+    const item = self.game_object.first_overlap(self.direction.x(), self.direction.y());
     if (item) |obj| {
         if (obj.obj().shootable) {
             obj.shot(50);
@@ -104,8 +81,8 @@ pub fn create(allocator: std.mem.Allocator, state: *GameState, x: i32, y: i32, p
     obj.hit_w = 2;
     obj.hit_h = 2;
     obj.hurtbox = .{ .x = -1, .y = -1, .w = 9, .h = 9 };
-    obj.speed_x = @floatFromInt(@as(i32, dir.axis_x()) * 8);
-    obj.speed_y = @floatFromInt(@as(i32, dir.axis_y()) * 8);
+    obj.speed_x = @floatFromInt(@as(i32, dir.x()) * 8);
+    obj.speed_y = @floatFromInt(@as(i32, dir.y()) * 8);
     const self = try allocator.create(Bullet);
     self.player = player;
     self.game_object = obj;
