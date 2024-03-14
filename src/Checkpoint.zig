@@ -69,7 +69,7 @@ fn draw(ptr: *anyopaque) void {
         5 => 3,
         else => 0,
     };
-    self.game_object.game_state.draw_spr(sheets.checkpoint.items[spr], self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
+    self.game_object.game_state.draw_sprite(sheets.checkpoint.items[spr], self.game_object.x, self.game_object.y, .{});
 }
 
 fn destroy(ptr: *anyopaque, allocator: Allocator) void {

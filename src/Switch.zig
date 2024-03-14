@@ -112,19 +112,13 @@ fn draw(ctx: *anyopaque) void {
     const y = self.game_object.y - self.game_object.game_state.camera_y;
     const hw = self.w / 2;
     const hh = self.h / 2;
-    tic.ellib(x + hw, y + hh, hw, hh, if (self.active) 2 else 10);
-    defer tdraw.set4bpp();
-    defer tdraw.reset_pallete();
-    tdraw.set1bpp();
-    tic.PALETTE_MAP.color1 = 15;
+    tic.ellib(x + hw, y + hh, hw - 1, hh - 1, if (self.active) 2 else 10);
 
     if (self.game_object.touchable) {
-        tic.PALETTE_MAP.color1 = if (self.active) 2 else 10;
-        self.game_object.game_state.draw_spr(sheets.shield_icons.items[0], self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{ .transparent = &.{0} });
+        self.game_object.game_state.draw_sprite(sheets.shield_icons.items[0], self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{});
     }
 
     if (self.game_object.shootable) {
-        tic.PALETTE_MAP.color1 = if (self.active) 1 else 2;
-        self.game_object.game_state.draw_spr(sheets.shield_icons.items[1], self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{ .transparent = &.{0} });
+        self.game_object.game_state.draw_sprite(sheets.shield_icons.items[1], self.game_object.x + hw - 4, self.game_object.y + hh - 4, .{});
     }
 }

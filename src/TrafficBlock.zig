@@ -184,13 +184,9 @@ fn draw_chain(self: *TrafficBlock) void {
 
     const gear_frame: usize = @intFromFloat(self.gear_frame);
     const frame = sheets.outergear.items[gear_frame];
-    tic.spr(frame, start_x, start_y, .{
-        .transparent = &.{0},
-    });
+    frame.draw(start_x, start_y, .{});
 
-    tic.spr(frame, end_x, end_y, .{
-        .transparent = &.{0},
-    });
+    frame.draw(end_x, end_y, .{});
 
     tdraw.reset_pallete();
 }
@@ -217,7 +213,8 @@ fn draw(ctx: *anyopaque) void {
             while (j < self.height) : (j += 1) {
                 // xor
                 const counter_rotate = (i & 1) != (j & 1);
-                tic.spr(if (counter_rotate) counter_frame else clockwise_frame, x + i * 8, y + j * 8 + 2, .{ .transparent = &.{0} });
+                const my_frame = if (counter_rotate) counter_frame else clockwise_frame;
+                my_frame.draw(x + i * 8, y + j * 8 + 2, .{});
             }
         }
     }
@@ -229,15 +226,15 @@ fn draw(ctx: *anyopaque) void {
     tdraw.set4bpp();
     tdraw.reset_pallete();
     tic.PALETTE_MAP.color1 = 0;
-    tic.spr(sheets.misc_4bpp.items[1], x, y, .{ .transparent = &.{0} });
-    tic.spr(sheets.misc_4bpp.items[1], x + (self.width - 1) * 8, y, .{ .transparent = &.{0}, .flip = .horizontal });
+    sheets.traffic_block.items[1].draw(x, y, .{});
+    sheets.traffic_block.items[1].draw(x + (self.width - 1) * 8, y, .{ .flip = .horizontal });
 
     tdraw.set2bpp();
     tic.PALETTE_MAP.color1 = 15;
     tic.PALETTE_MAP.color2 = 14;
     tic.PALETTE_MAP.color3 = 0;
-    tic.spr(sheets.misc_2bpp.items[1], x + (self.width - 1) * 8, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by180 });
-    tic.spr(sheets.misc_2bpp.items[1], x, y + (self.height - 1) * 8, .{ .transparent = &.{0}, .rotate = .by270 });
+    sheets.misc.items[1].draw(x + (self.width - 1) * 8, y + (self.height - 1) * 8, .{ .rotate = .by180 });
+    sheets.misc.items[1].draw(x, y + (self.height - 1) * 8, .{ .rotate = .by270 });
 
     var point = x + @divFloor(self.width, 2) * 8;
     // if even
@@ -254,7 +251,7 @@ fn draw(ctx: *anyopaque) void {
         .advancing => 6,
         .retreating, .stalled => 4,
     };
-    tic.spr(sheets.misc_4bpp.items[0], point, y, .{ .transparent = &.{1} });
+    sheets.traffic_block.items[0].draw(point, y, .{});
     tic.noclip();
 }
 

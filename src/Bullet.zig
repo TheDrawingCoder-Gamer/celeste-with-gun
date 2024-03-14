@@ -9,6 +9,7 @@ const tic = @import("common").tic;
 const tdraw = @import("draw.zig");
 const sheets = @import("sheets.zig");
 const math = @import("common").math;
+const Sprite = @import("common").Spritesheet.Sprite;
 
 var amount: u8 = 0;
 
@@ -19,13 +20,13 @@ player: u2,
 game_object: GameObject,
 direction: Direction,
 rotation: tic.Rotate,
-spr: i32,
+spr: Sprite,
 ttl: i32,
 
 pub fn draw(self: *Bullet) void {
     Player.pallete(self.player);
     tdraw.set2bpp();
-    self.game_object.game_state.draw_spr(self.spr, self.game_object.x, self.game_object.y, .{ .transparent = &.{0}, .rotate = self.rotation });
+    self.spr.draw(self.game_object.x - self.game_object.game_state.camera_x, self.game_object.y - self.game_object.game_state.camera_y, .{ .rotate = self.rotation });
     Player.reset_pallete();
     tdraw.set4bpp();
 }

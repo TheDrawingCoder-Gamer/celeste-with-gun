@@ -74,10 +74,10 @@ fn draw(ctx: *anyopaque) void {
     while (i < self.length) : (i += 1) {
         switch (self.direction) {
             .up, .down => {
-                self.game_object.game_state.draw_spr(spr, self.game_object.x + i * 8, self.game_object.y, .{ .rotate = self.rotate, .transparent = &.{0} });
+                self.game_object.game_state.draw_sprite(spr, self.game_object.x + i * 8, self.game_object.y, .{ .rotate = self.rotate });
             },
             .left, .right => {
-                self.game_object.game_state.draw_spr(spr, self.game_object.x, self.game_object.y + i * 8, .{ .rotate = self.rotate, .transparent = &.{0} });
+                self.game_object.game_state.draw_sprite(spr, self.game_object.x, self.game_object.y + i * 8, .{ .rotate = self.rotate });
             },
         }
     }

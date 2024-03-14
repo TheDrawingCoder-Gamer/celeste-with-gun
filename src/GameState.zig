@@ -10,6 +10,7 @@ const types = @import("types.zig");
 const Voice = @import("Audio.zig").Voice;
 const Input = @import("Input.zig");
 const sheets = @import("sheets.zig");
+const Spritesheet = @import("common").Spritesheet;
 
 pub const ObjectList = std.DoublyLinkedList(GameObject.IsGameObject);
 
@@ -43,6 +44,9 @@ pub fn wrap_node(self: *GameState, table: GameObject.IsGameObject) !*ObjectList.
 
 pub fn draw_spr(self: *GameState, id: i32, world_x: i32, world_y: i32, args: tic.SpriteArgs) void {
     tic.spr(id, world_x - self.camera_x, world_y - self.camera_y, args);
+}
+pub fn draw_sprite(self: *GameState, spr: Spritesheet.Sprite, world_x: i32, world_y: i32, args: Spritesheet.SpriteArgs) void {
+    spr.draw(world_x - self.camera_x, world_y - self.camera_y, args);
 }
 
 pub fn clean(self: *GameState, kill_player: bool) void {
@@ -179,7 +183,7 @@ pub fn loop(self: *GameState) void {
 
 fn draw_overlay(self: *GameState) void {
     if (self.player) |player| {
-        tic.spr(sheets.bullet_ui.items[player.midair_shot_count], 2, tic.HEIGHT - 18, .{ .transparent = &.{0}, .w = 2, .h = 2 });
+        sheets.bullet_ui.items[player.midair_shot_count].draw(2, tic.HEIGHT - 18, .{});
     }
 }
 

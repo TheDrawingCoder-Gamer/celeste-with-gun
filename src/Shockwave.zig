@@ -28,7 +28,7 @@ fn draw(ctx: *anyopaque) void {
     const self: *Shockwave = @alignCast(@ptrCast(ctx));
     Player.pallete(self.player);
     tdraw.set2bpp();
-    self.game_object.game_state.draw_spr(sheets.bullet.items[2], self.game_object.x, self.game_object.y, .{ .transparent = &.{0}, .rotate = self.rotation, .flip = self.flip });
+    self.game_object.game_state.draw_sprite(sheets.bullet.items[2], self.game_object.x, self.game_object.y, .{ .rotate = self.rotation, .flip = self.flip });
     Player.reset_pallete();
     tdraw.set4bpp();
 }

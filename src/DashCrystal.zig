@@ -7,6 +7,7 @@ const Player = @import("Player.zig");
 const tic = @import("common").tic;
 const tdraw = @import("draw.zig");
 const sheets = @import("sheets.zig");
+const Sprite = @import("common").Spritesheet.Sprite;
 
 const vtable: GameObject.VTable = .{ .ptr_update = @ptrCast(&update), .ptr_draw = @ptrCast(&draw), .can_touch = &GameObject.yesCanTouch, .get_object = @ptrCast(&dash_obj.get_object), .destroy = @ptrCast(&dash_obj.destroy), .touch = @ptrCast(&touch) };
 game_object: GameObject,
@@ -41,19 +42,7 @@ fn touch(self: *DashCrystal, player: *Player) void {
         player.dashes = self.dashes;
     }
 }
-fn dash_crystal_palette(dashes: u8) void {
-    const dash_pal: struct { u4, u4 } = switch (dashes) {
-        1 => .{ 1, 2 },
-        2 => .{ 6, 5 },
-        3 => .{ 13, 14 },
-        4 => .{ 4, 3 },
-        else => .{ 2, 3 },
-    };
-    tic.PALETTE_MAP.color1 = 12;
-    tic.PALETTE_MAP.color2 = dash_pal[0];
-    tic.PALETTE_MAP.color3 = dash_pal[1];
-}
-fn dash_sprite(exists: bool, dashes: u8) i32 {
+fn dash_sprite(exists: bool, dashes: u8) Sprite {
     const data: u8 = blk: {
         const res = dashes * 2;
         if (res >= 10) break :blk if (exists) 0 else 1;
@@ -64,8 +53,6 @@ fn dash_sprite(exists: bool, dashes: u8) i32 {
 fn draw(self: *DashCrystal) void {
     tdraw.set2bpp();
     defer tdraw.set4bpp();
-    dash_crystal_palette(self.dashes);
-    defer tdraw.reset_pallete();
-    const id: i32 = dash_sprite(self.use_timer == 0, self.dashes);
-    self.game_object.game_state.draw_spr(id, self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
+    const spr = dash_sprite(self.use_timer == 0, self.dashes);
+    self.game_object.game_state.draw_sprite(spr, self.game_object.x, self.game_object.y, .{});
 }

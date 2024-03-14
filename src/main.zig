@@ -40,16 +40,15 @@ export fn BOOT() void {
     sheets.destructible = data[4];
     sheets.destructible_gun = data[5];
     sheets.innergear = data[6];
-    sheets.misc_2bpp = data[7];
-    sheets.misc_4bpp = data[8];
-    sheets.outergear = data[9];
-    sheets.player = data[10];
-    sheets.shield_icons = data[11];
-    sheets.shotgun_blast = data[12];
-    sheets.spikes = data[13];
-    sheets.long_shotgun_blast = data[14];
-    sheets.ammo_reload = data[15];
-    sheets.bullet_ui = data[16];
+    sheets.misc = data[7];
+    sheets.outergear = data[8];
+    sheets.player = data[9];
+    sheets.shield_icons = data[10];
+    sheets.shotgun_blast = data[11];
+    sheets.spikes = data[12];
+    sheets.ammo_reload = data[13];
+    sheets.bullet_ui = data[14];
+    sheets.traffic_block = data[15];
     //for (Audio.music_patterns, 0..) |pattern, i| {
     //    tic.tracef("{d}, {any}", .{ i, pattern.get(0) });
     //}

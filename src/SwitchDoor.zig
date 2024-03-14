@@ -94,11 +94,11 @@ fn draw(ctx: *anyopaque) void {
     tic.rect(x1, y1, w, h, 8);
     tic.rectb(x1, y1, w, h, 9);
     // corners
-    const corner_spr = sheets.misc_4bpp.items[2];
-    tic.spr(corner_spr, x1, y1, .{ .transparent = &.{0} });
-    tic.spr(corner_spr, x1 + w - 8, y1, .{ .transparent = &.{0}, .rotate = .by90 });
-    tic.spr(corner_spr, x1 + w - 8, y1 + h - 8, .{ .transparent = &.{0}, .rotate = .by180 });
-    tic.spr(corner_spr, x1, y1 + h - 8, .{ .transparent = &.{0}, .rotate = .by270 });
+    const corner_spr = sheets.misc.items[5];
+    corner_spr.draw(x1, y1, .{});
+    corner_spr.draw(x1 + w - 8, y1, .{ .rotate = .by90 });
+    corner_spr.draw(x1 + w - 8, y1 + h - 8, .{ .rotate = .by180 });
+    corner_spr.draw(x1, y1 + h - 8, .{ .rotate = .by270 });
     tdraw.set1bpp();
     tic.PALETTE_MAP.color1 = 11;
     defer tdraw.set4bpp();
@@ -107,5 +107,5 @@ fn draw(ctx: *anyopaque) void {
         if (@mod(self.width, 2) != 0) @divFloor(self.width, 2) * 8 else self.width * 4 - 4;
     const spr_y = y1 +
         if (@mod(self.height, 2) != 0) @divFloor(self.height, 2) * 8 else self.height * 4 - 4;
-    tic.spr(sheets.shield_icons.items[0], spr_x, spr_y, .{ .transparent = &.{0} });
+    sheets.shield_icons.items[0].draw(spr_x, spr_y, .{});
 }

@@ -22,7 +22,7 @@ fn draw(ctx: *anyopaque) void {
     tdraw.set2bpp();
     // defer as we only draw in 2bpp
     defer tdraw.set4bpp();
-    self.game_object.game_state.draw_spr(sheets.crumble.items[@min(@as(usize, @divFloor(self.t_alive, 4)), 4)], self.game_object.x, self.game_object.y, .{ .transparent = &.{0} });
+    self.game_object.game_state.draw_sprite(sheets.crumble.items[@min(@as(usize, @divFloor(self.t_alive, 4)), 4)], self.game_object.x, self.game_object.y, .{});
 }
 
 fn destroy(ctx: *anyopaque, allocator: Allocator) void {

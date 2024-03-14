@@ -66,6 +66,7 @@ t_accel_follow_thru: u8 = 0,
 midair_shot_count: u8 = MAX_MIDAIR_SHOT,
 blast_time: u8 = 0,
 blast_pos: types.Point = .{},
+blast_long: bool = false,
 // recharge timer for shots : )
 t_shot_recharge: ?u8 = null,
 
@@ -146,22 +147,23 @@ fn shotgun_shot(self: *Player) void {
         .up_left, .left => .left,
         .down_left, .down, .down_right => .down,
     };
-    shotgun_shot_dir(self, based_dir, !on_ground, 5);
+    shotgun_shot_dir(self, based_dir, !on_ground, 5, on_ground);
 }
 
-fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_mult: f32) void {
+fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_mult: f32, long: bool) void {
     self.t_shoot_cooldown = 6;
     self.t_fire_pose = 8;
     self.fire_dir = dir.as_princible();
     self.blast_time = 8;
+    self.blast_long = long;
     const pos = blk: {
         const x: i32 = if (dir.y() != 0) -4 else switch (dir.x()) {
-            -1 => -16,
+            -1 => if (long) -32 else -16,
             1 => 8,
             else => unreachable,
         };
         const y: i32 = if (dir.x() != 0) -4 else switch (dir.y()) {
-            -1 => -16,
+            -1 => if (long) -32 else -16,
             1 => 8,
             else => unreachable,
         };
@@ -169,7 +171,13 @@ fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_
     };
     self.blast_pos = pos;
     const world_pos = pos.add(.{ .x = self.game_object.x, .y = self.game_object.y });
-    self.game_object.game_state.shot_hitbox(types.Box{ .x = world_pos.x, .y = world_pos.y, .w = 16, .h = 16 }, 100);
+    if (long) {
+        if (dir.y() != 0) {
+            self.game_object.game_state.shot_hitbox(types.Box{ .x = world_pos.x, .y = world_pos.y, .w = 16, .h = 32 }, 100);
+        } else {
+            self.game_object.game_state.shot_hitbox(types.Box{ .x = world_pos.x, .y = world_pos.y, .w = 32, .h = 16 }, 100);
+        }
+    }
     if (do_momentum) {
         self.add_shot_momentum_raw(false, 2, y_mult, dir.x(), dir.y());
     }
@@ -178,7 +186,8 @@ fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_
 }
 fn shotgun_doublejump(self: *Player) void {
     _ = self.input.consume_jump_press();
-    self.shotgun_shot_dir(.down, true, 5 + @as(f32, @floatFromInt(self.midair_shot_count)) / 2);
+    if (self.midair_shot_count == 0) return;
+    self.shotgun_shot_dir(.down, true, 4 + @as(f32, @floatFromInt(self.midair_shot_count)) / 2, true);
     self.midair_shot_count = 0;
 }
 
@@ -198,6 +207,9 @@ fn add_shot_momentum_raw(self: *Player, comptime block_downwards: bool, comptime
             if (self.game_object.speed_y >= 0) {
                 self.game_object.speed_y = y_off;
                 break :y_off_blk;
+                // if already going real fast, cap the speed
+            } else if (self.game_object.speed_y <= -5) {
+                self.game_object.speed_y = @min(self.game_object.speed_y, @max(self.game_object.speed_y + y_off, -5));
             }
         }
 
@@ -846,16 +858,13 @@ pub fn draw(self: *Player) void {
     defer if (self.blast_time > 0) {
         tdraw.set1bpp();
         tic80.PALETTE_MAP.color1 = if (self.blast_time > 3) 3 else 4;
-        self.game_object.game_state.draw_spr(sheets.shotgun_blast.items[0], obj.x + self.blast_pos.x, obj.y + self.blast_pos.y, .{
+        self.game_object.game_state.draw_sprite(sheets.shotgun_blast.items[if (self.blast_long) 1 else 0], obj.x + self.blast_pos.x, obj.y + self.blast_pos.y, .{
             .rotate = switch (self.fire_dir.cardinal_bias_horz()) {
                 .up => .by270,
                 .down => .by90,
                 .left => .by180,
                 .right => .no,
             },
-            .transparent = &.{0},
-            .w = 2,
-            .h = 2,
         });
     };
     tdraw.set2bpp();
@@ -866,7 +875,7 @@ pub fn draw(self: *Player) void {
             skull_offset_y = 3;
             skull_offset_y -= self.t_recharge / 3;
         }
-        self.game_object.game_state.draw_spr(sheets.player.items[17], obj.x, obj.y + skull_offset_y, .{ .flip = facing, .transparent = &.{0} });
+        self.game_object.game_state.draw_sprite(sheets.player.items[17], obj.x, obj.y + skull_offset_y, .{ .flip = facing });
         return;
     }
     const accel = obj.velocity().minus(self.last_velocity);
@@ -885,10 +894,10 @@ pub fn draw(self: *Player) void {
         clamp_mag_high(@as(i32, @intFromFloat(-self.follow_thru_accel.y)), 2)
     else
         0;
-    self.game_object.game_state.draw_spr(sheets.player.items[17], obj.x, obj.y + skull_offset_y, .{ .flip = facing, .transparent = &.{0} });
+    self.game_object.game_state.draw_sprite(sheets.player.items[17], obj.x, obj.y + skull_offset_y, .{ .flip = facing });
 
     // _ = tic80.vbank(1);
-    self.game_object.game_state.draw_spr(sheets.player.items[self.spr], obj.x, obj.y, .{ .flip = facing, .transparent = &.{0} });
+    self.game_object.game_state.draw_sprite(sheets.player.items[self.spr], obj.x, obj.y, .{ .flip = facing });
     // _ = tic80.vbank(0);
 
 }
