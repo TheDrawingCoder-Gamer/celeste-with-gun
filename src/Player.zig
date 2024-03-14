@@ -140,16 +140,27 @@ fn shotgun_shot(self: *Player) void {
     const x_dir = if (self.input.input_y == 0 and self.input.input_x == 0) self.game_object.facing else self.input.input_x;
     const dir = types.DigitalDir.as_wind(.{ .x = x_dir, .y = self.input.input_y }) orelse unreachable;
     // choose bias based on grounded state
-    const based_dir = if (on_ground) dir.cardinal_bias_horz() else dir.cardinal_bias_vert();
-    self.fire_dir = based_dir.as_princible();
+    const based_dir: types.CardinalDir = if (on_ground) dir.cardinal_bias_horz() else switch (dir) {
+        .up => .up,
+        .up_right, .right => .right,
+        .up_left, .left => .left,
+        .down_left, .down, .down_right => .down,
+    };
+    shotgun_shot_dir(self, based_dir, !on_ground);
+}
+
+fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool) void {
+    self.t_shoot_cooldown = 6;
+    self.t_fire_pose = 8;
+    self.fire_dir = dir.as_princible();
     self.blast_time = 8;
     const pos = blk: {
-        const x: i32 = if (based_dir.y() != 0) -4 else switch (based_dir.x()) {
+        const x: i32 = if (dir.y() != 0) -4 else switch (dir.x()) {
             -1 => -16,
             1 => 8,
             else => unreachable,
         };
-        const y: i32 = if (based_dir.x() != 0) -4 else switch (based_dir.y()) {
+        const y: i32 = if (dir.x() != 0) -4 else switch (dir.y()) {
             -1 => -16,
             1 => 8,
             else => unreachable,
@@ -159,13 +170,23 @@ fn shotgun_shot(self: *Player) void {
     self.blast_pos = pos;
     const world_pos = pos.add(.{ .x = self.game_object.x, .y = self.game_object.y });
     self.game_object.game_state.shot_hitbox(types.Box{ .x = world_pos.x, .y = world_pos.y, .w = 16, .h = 16 }, 100);
-    self.add_shot_momentum_raw(false, 2, 2, based_dir.x(), based_dir.y());
+    if (do_momentum) {
+        self.add_shot_momentum_raw(false, 2, if (dir == .down) 6 else 5, dir.x(), dir.y());
+    }
+    if (dir == .down) {
+        self.midair_shot_count = 0;
+    }
+    self.voice.play(9, .{ .volume = 5 });
+}
+fn shotgun_doublejump(self: *Player) void {
+    _ = self.input.consume_jump_press();
+    self.shotgun_shot_dir(.down, true);
 }
 
 fn add_shot_momentum(self: *Player, x: i2, y: i2) void {
     self.add_shot_momentum_raw(true, 0.2, 5.0, x, y);
 }
-fn add_shot_momentum_raw(self: *Player, comptime block_downwards: bool, comptime x_mult: f32, comptime y_mult: f32, x: i2, y: i2) void {
+fn add_shot_momentum_raw(self: *Player, comptime block_downwards: bool, comptime x_mult: f32, y_mult: f32, x: i2, y: i2) void {
     if (self.midair_shot_count == 0) return;
     self.midair_shot_count -= 1;
     const da_y = if (y < 0 and block_downwards) 0 else -y;
@@ -173,9 +194,14 @@ fn add_shot_momentum_raw(self: *Player, comptime block_downwards: bool, comptime
 
     const y_off: f32 = @as(f32, @floatFromInt(da_y)) * y_mult;
     const x_off: f32 = @as(f32, @floatFromInt(da_x)) * x_mult;
-    if (self.game_object.speed_y >= 0) {
-        self.game_object.speed_y = y_off;
-    } else {
+    y_off_blk: {
+        if (y_off <= 0) {
+            if (self.game_object.speed_y >= 0) {
+                self.game_object.speed_y = y_off;
+                break :y_off_blk;
+            }
+        }
+
         self.game_object.speed_y += y_off;
     }
 
@@ -476,8 +502,11 @@ pub fn update(self: *Player) void {
                     self.jump();
                 } else if (sliding) {
                     self.wall_jump(-self.input.input_x);
-                } else if (self.t_shoot_cooldown == 0 and self.gun == .projectile) {
-                    self.jump_shoot();
+                } else if (self.t_shoot_cooldown == 0) {
+                    switch (self.gun) {
+                        .projectile => self.jump_shoot(),
+                        .shotgun => self.shotgun_doublejump(),
+                    }
                 }
             }
             if (self.input.input_gun_pressed > 0) {
@@ -547,10 +576,10 @@ pub fn update(self: *Player) void {
     } else if (self.t_fire_pose > 0) {
         self.spr = switch (self.fire_dir) {
             .right, .left => 8,
-            .up_left, .up_right => 12,
-            .down_left, .down_right => 13,
+            .up_left, .up_right => 11,
+            .down_left, .down_right => 12,
             .up => 9,
-            .down => 11,
+            .down => 10,
         };
     } else if (!on_ground) {
         if (sliding) {

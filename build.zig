@@ -1,6 +1,86 @@
 const std = @import("std");
 const json = std.json;
+const Step = std.Build.Step;
 
+// marks a directory and all its direct children as in the cache
+const CacheDirectory = struct {
+    step: Step,
+    dir: std.Build.LazyPath,
+    stinky_dir: std.Build.GeneratedFile,
+
+    pub fn init(owner: *std.Build, dir: std.Build.LazyPath) *CacheDirectory {
+        const self = owner.allocator.create(CacheDirectory) catch @panic("OOM");
+        self.* = .{
+            .step = Step.init(.{
+                .owner = owner,
+                .id = .custom,
+                .name = "CacheDirectory",
+                .makeFn = make,
+            }),
+            .dir = dir,
+            .stinky_dir = .{ .step = &self.step },
+        };
+        return self;
+    }
+
+    fn getDirectory(self: *CacheDirectory) std.Build.LazyPath {
+        return .{ .generated = &self.stinky_dir };
+    }
+    fn make(step: *Step, prog_node: *std.Progress.Node) !void {
+        _ = prog_node;
+        const b = step.owner;
+        const self = @fieldParentPtr(CacheDirectory, "step", step);
+        var man = b.graph.cache.obtain();
+        defer man.deinit();
+
+        man.hash.add(@as(u32, 0x69e20ee));
+        const path = self.dir.getPath(b);
+        var dir = try std.fs.openDirAbsolute(path, .{ .iterate = true });
+        defer dir.close();
+        {
+            var iterator = dir.iterate();
+            while (try iterator.next()) |node| {
+                if (node.kind == .file) {
+                    const full_paths = [_][]const u8{ path, node.name };
+                    const data = try std.fs.path.join(b.allocator, &full_paths);
+                    // 10 MiB
+                    _ = try man.addFile(data, 1024 * 1024 * 10);
+                }
+            }
+        }
+        if (try step.cacheHit(&man)) {
+            const digest = man.final();
+
+            self.stinky_dir.path = try b.cache_root.join(b.allocator, &.{ "sprites", &digest });
+            return;
+        }
+
+        const digest = man.final();
+        const cache_path = "sprites" ++ std.fs.path.sep_str ++ digest;
+
+        self.stinky_dir.path = try b.cache_root.join(b.allocator, &.{ "sprites", &digest });
+
+        var cache_dir = b.cache_root.handle.makeOpenPath(cache_path, .{}) catch |err| {
+            return step.fail("unable to make path '{}{s}': {s}", .{
+                b.cache_root, cache_path, @errorName(err),
+            });
+        };
+        defer cache_dir.close();
+
+        {
+            var iterator = dir.iterate();
+            while (try iterator.next()) |node| {
+                if (node.kind == .file) {
+                    const src_path = try std.fs.path.join(b.allocator, &.{ path, node.name });
+                    const dst_path = try b.cache_root.join(b.allocator, &.{ "sprites", &digest, node.name });
+                    try std.fs.copyFileAbsolute(src_path, dst_path, .{});
+                }
+            }
+        }
+
+        try step.writeManifest(&man);
+    }
+};
 pub fn build(b: *std.Build) !void {
     const optimize = std.builtin.OptimizeMode.ReleaseSmall;
     const optimize_native = std.builtin.OptimizeMode.Debug;
@@ -32,16 +112,20 @@ pub fn build(b: *std.Build) !void {
     tic80ify_wasm(exe);
 
     b.installArtifact(exe);
+
     const converter = b.addExecutable(.{ .name = "converter", .root_source_file = .{ .path = "converter/main.zig" }, .target = native_target, .optimize = optimize_native });
 
     converter.root_module.addImport("s2s", s2s_native_dep.module("s2s"));
     converter.root_module.addImport("common", common_mod);
     converter.root_module.addImport("tatl", tatl_dep.module("tatl"));
+    const cached_dir = CacheDirectory.init(b, .{ .path = "assets/sprites" });
+
     const pack_files = b.addRunArtifact(converter);
+    pack_files.step.dependOn(&cached_dir.step);
     pack_files.addArg("pack");
     const packed_file = pack_files.addOutputFileArg("res.wasmp");
     pack_files.addFileArg(.{ .path = "assets/unpacked_data.wasmp" });
-    pack_files.addDirectoryArg(.{ .path = "assets/sprites" });
+    pack_files.addDirectoryArg(cached_dir.getDirectory());
     pack_files.addFileArg(.{ .path = "assets/sprites.txt" });
     pack_files.addFileArg(.{ .path = "assets/tiles.aseprite" });
     pack_files.addFileArg(.{ .path = "assets/maps/map.ldtk" });

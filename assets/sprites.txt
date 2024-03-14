@@ -12,3 +12,4 @@ player.aseprite
 shield_icons.aseprite
 shotgun_blast.aseprite
 spikes.aseprite
+long_shotgun_blast.aseprite
