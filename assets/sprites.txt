@@ -13,3 +13,5 @@ shield_icons.aseprite
 shotgun_blast.aseprite
 spikes.aseprite
 long_shotgun_blast.aseprite
+ammo_reload.aseprite
+bullet_ui.aseprite

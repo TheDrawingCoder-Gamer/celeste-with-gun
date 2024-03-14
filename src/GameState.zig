@@ -9,6 +9,7 @@ const Screenwipe = @import("Screenwipe.zig");
 const types = @import("types.zig");
 const Voice = @import("Audio.zig").Voice;
 const Input = @import("Input.zig");
+const sheets = @import("sheets.zig");
 
 pub const ObjectList = std.DoublyLinkedList(GameObject.IsGameObject);
 
@@ -172,6 +173,13 @@ pub fn loop(self: *GameState) void {
     if (self.reset_scheduled) {
         self.loaded_level.reset() catch unreachable;
         self.reset_scheduled = false;
+    }
+    self.draw_overlay();
+}
+
+fn draw_overlay(self: *GameState) void {
+    if (self.player) |player| {
+        tic.spr(sheets.bullet_ui.items[player.midair_shot_count], 2, tic.HEIGHT - 18, .{ .transparent = &.{0}, .w = 2, .h = 2 });
     }
 }
 

@@ -47,6 +47,9 @@ export fn BOOT() void {
     sheets.shield_icons = data[11];
     sheets.shotgun_blast = data[12];
     sheets.spikes = data[13];
+    sheets.long_shotgun_blast = data[14];
+    sheets.ammo_reload = data[15];
+    sheets.bullet_ui = data[16];
     //for (Audio.music_patterns, 0..) |pattern, i| {
     //    tic.tracef("{d}, {any}", .{ i, pattern.get(0) });
     //}

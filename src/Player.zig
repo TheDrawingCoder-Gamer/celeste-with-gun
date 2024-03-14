@@ -27,7 +27,7 @@ fn as_rider(ctx: *anyopaque) GameObject.IRide {
 
 const MAX_FALL_SPEED = 2;
 const MAX_FAST_FALL_SPEED = 2.6;
-const MAX_MIDAIR_SHOT = 3;
+const MAX_MIDAIR_SHOT = 4;
 state: State = .normal,
 t_var_jump: u32 = 0,
 t_jump_grace: u8 = 0,
@@ -146,10 +146,10 @@ fn shotgun_shot(self: *Player) void {
         .up_left, .left => .left,
         .down_left, .down, .down_right => .down,
     };
-    shotgun_shot_dir(self, based_dir, !on_ground);
+    shotgun_shot_dir(self, based_dir, !on_ground, 5);
 }
 
-fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool) void {
+fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_mult: f32) void {
     self.t_shoot_cooldown = 6;
     self.t_fire_pose = 8;
     self.fire_dir = dir.as_princible();
@@ -171,16 +171,15 @@ fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool) vo
     const world_pos = pos.add(.{ .x = self.game_object.x, .y = self.game_object.y });
     self.game_object.game_state.shot_hitbox(types.Box{ .x = world_pos.x, .y = world_pos.y, .w = 16, .h = 16 }, 100);
     if (do_momentum) {
-        self.add_shot_momentum_raw(false, 2, if (dir == .down) 6 else 5, dir.x(), dir.y());
+        self.add_shot_momentum_raw(false, 2, y_mult, dir.x(), dir.y());
     }
-    if (dir == .down) {
-        self.midair_shot_count = 0;
-    }
+
     self.voice.play(9, .{ .volume = 5 });
 }
 fn shotgun_doublejump(self: *Player) void {
     _ = self.input.consume_jump_press();
-    self.shotgun_shot_dir(.down, true);
+    self.shotgun_shot_dir(.down, true, 5 + @as(f32, @floatFromInt(self.midair_shot_count)) / 2);
+    self.midair_shot_count = 0;
 }
 
 fn add_shot_momentum(self: *Player, x: i2, y: i2) void {

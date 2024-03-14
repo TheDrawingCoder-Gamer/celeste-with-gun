@@ -16,3 +16,6 @@ pub var player: Spritesheet = undefined;
 pub var shield_icons: Spritesheet = undefined;
 pub var shotgun_blast: Spritesheet = undefined;
 pub var spikes: Spritesheet = undefined;
+pub var long_shotgun_blast: Spritesheet = undefined;
+pub var ammo_reload: Spritesheet = undefined;
+pub var bullet_ui: Spritesheet = undefined;
