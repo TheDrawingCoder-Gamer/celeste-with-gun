@@ -33,6 +33,7 @@ const RunMode = enum {
 
 const SPR_SIZE = 32;
 const PIXELS_IN_SPR = 64;
+var palette: [16]tatl.RGBA = undefined;
 pub fn main() !void {
     alloc = gpa.allocator();
     var args = try std.process.argsWithAllocator(alloc);
@@ -43,6 +44,7 @@ pub fn main() !void {
         .pack => {
             const respath = args.next() orelse return error.TooFewArgs;
             const unpackedpath = args.next() orelse return error.TooFewArgs;
+            const palettepath = args.next() orelse return error.TooFewArgs;
             const rootdirpath = args.next() orelse return error.TooFewArgs;
             const listpath = args.next() orelse return error.TooFewArgs;
             const tilepath = args.next() orelse return error.TooFewArgs;
@@ -51,6 +53,25 @@ pub fn main() !void {
             var rootdir = try std.fs.openDirAbsolute(rootdirpath, .{});
             defer rootdir.close();
 
+            {
+                var file = try std.fs.openFileAbsolute(palettepath, .{});
+                defer file.close();
+                var i: usize = 0;
+                while (i < 16) : (i += 1) {
+                    var buf = [_]u8 {0} ** 8;
+                    const res = file.reader().readUntilDelimiter(&buf, '\n') catch |err| switch (err) {
+                       error.EndOfStream => break,
+                       else => return err,
+                    };
+                    if (res.len < 6) continue;
+                    palette[i] = tatl.RGBA { .r = try std.fmt.parseUnsigned(u8, res[0..2], 16), .g = try std.fmt.parseUnsigned(u8, res[2..4], 16), .b = try std.fmt.parseUnsigned(u8, res[4..6], 16), .a = 255, };
+                }
+
+                while (i < 16) : (i += 1) {
+                    palette[i] = tatl.RGBA { .r = 0, .g = 0, .b = 0, .a = 0 };
+                }
+
+            }
             var files = try std.fs.openFileAbsolute(listpath, .{});
             defer files.close();
             const tilease = blk: {
@@ -98,6 +119,12 @@ pub fn main() !void {
             try save_bin_section(resfile.writer(), "SPRITES", &res_data.sprites.bytes, SPR_SIZE, true);
             try save_bin_section(resfile.writer(), "TILES", &res_data.tiles.bytes, SPR_SIZE, true);
             try save_bin_section(resfile.writer(), "FLAGS", &res_data.flags, 256, true);
+
+            {
+                const converted = convert_palette(palette);
+                std.debug.assert(converted.bytes.len == 48);
+                try save_bin_section(resfile.writer(), "PALETTE", &converted.bytes, 48, false);
+            }
         },
         .unpack => {
             const packedpath = args.next() orelse return error.TooFewArgs;
@@ -116,6 +143,17 @@ pub fn main() !void {
     }
 }
 
+fn convert_palette(pal: [16]tatl.RGBA) std.PackedIntArray(u24, 16) {
+    var res = std.PackedIntArray(u24, 16).initAllTo(0);
+
+    for (pal,0..) |col, i| {
+        res.set(i, compress_color(col));
+    }
+    return res;
+}
+fn compress_color(col: tatl.RGBA) u24 {
+    return (@as(u24, col.r) << 16) + (@as(u24, col.g) << 8) + @as(u24, col.b);
+}
 fn buf_empty(data: []const u8) bool {
     for (data) |i| {
         if (i != 0)
@@ -370,7 +408,7 @@ fn skip_to_end(allocator: std.mem.Allocator, input: anytype, a_output: anytype, 
 }
 fn extract_packed(input_f: std.fs.File) ![]u8 {
     var input = input_f;
-    const whitelist = [_][]const u8{ "WAVES", "SFX", "PATTERNS", "TRACKS", "PALETTE" };
+    const whitelist = [_][]const u8{ "WAVES", "SFX", "PATTERNS", "TRACKS" };
     const len = try input.seekableStream().getEndPos();
     var good_data = try alloc.alloc(u8, @intCast(len));
     defer alloc.free(good_data);
@@ -432,24 +470,7 @@ fn extract_packed(input_f: std.fs.File) ![]u8 {
     return out_data;
 }
 
-const SWEETIE_PALETTE = [16]tatl.RGBA{
-    .{ .r = 26, .g = 28, .b = 44, .a = 255 },
-    .{ .r = 93, .g = 39, .b = 93, .a = 255 },
-    .{ .r = 177, .g = 64, .b = 83, .a = 255 },
-    .{ .r = 239, .g = 125, .b = 87, .a = 255 },
-    .{ .r = 255, .g = 205, .b = 117, .a = 255 },
-    .{ .r = 167, .g = 240, .b = 112, .a = 255 },
-    .{ .r = 56, .g = 183, .b = 100, .a = 255 },
-    .{ .r = 37, .g = 113, .b = 121, .a = 255 },
-    .{ .r = 41, .g = 54, .b = 111, .a = 255 },
-    .{ .r = 59, .g = 93, .b = 201, .a = 255 },
-    .{ .r = 65, .g = 166, .b = 246, .a = 255 },
-    .{ .r = 115, .g = 239, .b = 247, .a = 255 },
-    .{ .r = 244, .g = 244, .b = 244, .a = 255 },
-    .{ .r = 148, .g = 176, .b = 194, .a = 255 },
-    .{ .r = 86, .g = 108, .b = 134, .a = 255 },
-    .{ .r = 51, .g = 60, .b = 87, .a = 255 },
-};
+
 
 // don't ask...
 inline fn minus(comptime T: type, a: T, b: T) T {
@@ -458,7 +479,7 @@ inline fn minus(comptime T: type, a: T, b: T) T {
 fn nearest_color(color: tatl.RGBA, count: usize) u4 {
     var min: u32 = std.math.maxInt(u32);
     var nearest: u4 = 0;
-    for (SWEETIE_PALETTE[0..count], 0..) |pal_col, i| {
+    for (palette[0..count], 0..) |pal_col, i| {
         const dr: i32 = minus(i32, pal_col.r, color.r);
         const dg: i32 = minus(i32, pal_col.g, color.g);
         const db: i32 = minus(i32, pal_col.b, color.b);
@@ -600,8 +621,8 @@ fn pixel_pos_to_tic80_index(x: usize, y: usize) usize {
     return idx;
 }
 const SHEET_HEIGHT = 16;
-fn default_color(palette: tatl.Palette) u4 {
-    return nearest_color(palette.colors[palette.transparent_index], 16);
+fn default_color(pal: tatl.Palette) u4 {
+    return nearest_color(pal.colors[pal.transparent_index], 16);
 }
 // infer the color to be written to palette
 fn infer_color(trans_color: u4, pal: Spritesheet.SpritePalette, color: tatl.RGBA) u4 {

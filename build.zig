@@ -125,6 +125,7 @@ pub fn build(b: *std.Build) !void {
     pack_files.addArg("pack");
     const packed_file = pack_files.addOutputFileArg("res.wasmp");
     pack_files.addFileArg(.{ .path = "assets/unpacked_data.wasmp" });
+    pack_files.addFileArg(.{ .path = "assets/palette.hex" });
     pack_files.addDirectoryArg(cached_dir.getDirectory());
     pack_files.addFileArg(.{ .path = "assets/sprites.txt" });
     pack_files.addFileArg(.{ .path = "assets/tiles.aseprite" });

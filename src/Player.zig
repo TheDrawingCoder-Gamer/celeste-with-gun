@@ -177,6 +177,8 @@ fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_
         } else {
             self.game_object.game_state.shot_hitbox(types.Box{ .x = world_pos.x, .y = world_pos.y, .w = 32, .h = 16 }, 100);
         }
+    } else {
+        self.game_object.game_state.shot_hitbox(types.Box{ .x = world_pos.x, .y = world_pos.y, .w = 16, .h = 16 }, 100);
     }
     if (do_momentum) {
         self.add_shot_momentum_raw(false, 2, y_mult, dir.x(), dir.y());

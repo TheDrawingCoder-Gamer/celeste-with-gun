@@ -5011,16 +5011,16 @@
 					"entityInstances": [
 						{
 							"__identifier": "Switch",
-							"__grid": [13,14],
+							"__grid": [13,12],
 							"__pivot": [0,0],
 							"__tags": [],
 							"__tile": null,
 							"__smartColor": "#0099DB",
 							"iid": "50674660-d7b0-11ee-be0e-77bb1ac82ae8",
-							"width": 8,
-							"height": 8,
+							"width": 24,
+							"height": 24,
 							"defUid": 46,
-							"px": [104,112],
+							"px": [104,96],
 							"fieldInstances": [
 								{ "__identifier": "kind", "__type": "Int", "__value": 0, "__tile": null, "defUid": 47, "realEditorValues": [] },
 								{ "__identifier": "can_shoot", "__type": "Bool", "__value": true, "__tile": null, "defUid": 59, "realEditorValues": [{
@@ -5033,7 +5033,7 @@
 								}] }
 							],
 							"__worldX": 584,
-							"__worldY": 112
+							"__worldY": 96
 						},
 						{
 							"__identifier": "SwitchDoor",
