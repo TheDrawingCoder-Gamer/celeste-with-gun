@@ -1,17 +1,16 @@
 const tic = @import("common").tic;
+const tic_ext = @import("common").ticext;
 const std = @import("std");
 const types = @import("common").math;
 
-pub const BPP: *u4 = @as(*u4, @ptrFromInt(0x3ffc));
-
 pub fn set1bpp() void {
-    BPP.* = 8;
+    tic_ext.BPP.* = .one;
 }
 pub fn set2bpp() void {
-    BPP.* = 4;
+    tic_ext.BPP.* = .two;
 }
 pub fn set4bpp() void {
-    BPP.* = 2;
+    tic_ext.BPP.* = .four;
 }
 
 const PaletteIO = std.packed_int_array.PackedIntIo(u4, .little);

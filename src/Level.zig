@@ -14,6 +14,7 @@ const Switch = @import("Switch.zig");
 const SwitchDoor = @import("SwitchDoor.zig");
 const TrafficBlock = @import("TrafficBlock.zig");
 const DashCrystal = @import("DashCrystal.zig");
+const AmmoCrystal = @import("AmmoCrystal.zig");
 
 height: i32,
 width: i32,
@@ -117,6 +118,9 @@ pub fn init(self: *Level) !void {
             },
             .checkpoint => {
                 _ = try Checkpoint.create(self.state.allocator, self.state, @divFloor(entity.x, 8), @divFloor(entity.y, 8));
+            },
+            .ammo_crystal => {
+                _ = try AmmoCrystal.create(self.state, entity.x, entity.y);
             },
         }
     }

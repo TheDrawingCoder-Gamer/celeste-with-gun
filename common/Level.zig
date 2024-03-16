@@ -22,6 +22,7 @@ pub const Entity = struct {
         spike: Spike,
         dash_crystal: u8,
         checkpoint: void,
+        ammo_crystal,
     };
     x: i32,
     y: i32,

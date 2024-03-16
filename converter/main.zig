@@ -152,7 +152,7 @@ fn convert_palette(pal: [16]tatl.RGBA) std.PackedIntArray(u24, 16) {
     return res;
 }
 fn compress_color(col: tatl.RGBA) u24 {
-    return (@as(u24, col.r) << 16) + (@as(u24, col.g) << 8) + @as(u24, col.b);
+    return std.mem.littleToNative(u24, (@as(u24, col.b) << 16) + (@as(u24, col.g) << 8) + @as(u24, col.r));
 }
 fn buf_empty(data: []const u8) bool {
     for (data) |i| {
@@ -365,6 +365,8 @@ fn process_entity(world_pos: math.Point, o_entities: *std.ArrayList(SavedLevel.E
         kind = .{ .dash_crystal = dashes };
     } else if (std.mem.eql(u8, entity.__identifier, "Checkpoint")) {
         kind = .checkpoint;
+    } else if (std.mem.eql(u8, entity.__identifier, "AmmoCrystal")) {
+        kind = .ammo_crystal;
     }
 
     if (kind) |k| {
@@ -521,6 +523,19 @@ fn color_at(color_depth: tatl.ColorDepth, ase_pallete: tatl.Palette, cel: tatl.C
 }
 
 fn pal_color_at(color_depth: tatl.ColorDepth, ase_palette: tatl.Palette, cel: tatl.Cel, x: usize, y: usize, bpp: tic80_ext.Bpp) !?u4 {
+    if (color_depth == .indexed) {
+        if (ase_palette.colors.len <= 16) {
+            // trust the palette :flushed:
+            const img_cel = try get_image_from_cel_or_cry(cel);
+            const good_x = @as(isize, @intCast(x)) - @as(isize, cel.x);
+            if (good_x < 0 or good_x >= img_cel.width) return null;
+            const good_y = @as(isize, @intCast(y)) - @as(isize, cel.y);
+            if (good_y < 0 or good_y >= img_cel.height) return null;
+            const idx: isize = @intCast(good_y * img_cel.width + good_x);
+
+            return @intCast(img_cel.pixels[@intCast(idx)]);
+        }
+    }
     const col_at = color_at(color_depth, ase_palette, cel, x, y) catch |err| switch (err) {
         error.OutsideCel => return null,
         else => return err,
@@ -755,7 +770,7 @@ fn pack_ase(bpp: tic80_ext.Bpp, ase: tatl.AsepriteImport, sprite_sheet: *PackedT
                         const col2 = try infer_color_at(ase.color_depth, ase.palette, cel, x + 1, y, def_color, pal);
                         const col3 = try infer_color_at(ase.color_depth, ase.palette, cel, x + 2, y, def_color, pal);
                         const col4 = try infer_color_at(ase.color_depth, ase.palette, cel, x + 3, y, def_color, pal);
-                        break :blk (col4 << 3) + (col3 << 2) + (col2 << 1) + col1;
+                        break :blk (col4 << 3) | (col3 << 2) | (col2 << 1) | col1;
                     },
                 };
 
@@ -778,16 +793,10 @@ fn packinator(root_dir: std.fs.Dir, in_file: std.fs.File, tiles: tatl.AsepriteIm
     var tile_data = PackedTilesheet.initAllTo(0);
     {
         const cel = tiles.frames[0].cels[0];
-        for (0..16) |i| {
-            for (0..16) |j| {
-                for (0..8) |ii| {
-                    for (0..8) |jj| {
-                        const x = (i * 8) + ii;
-                        const y = (j * 8) + jj;
+        for (0..128) |x| {
+            for (0..128) |y| {
                         const col = try pal_color_at(tiles.color_depth, tiles.palette, cel, x, y, .four) orelse 0;
-                        tile_data.set((j * 16 + i) * PIXELS_IN_SPR + (jj * 8 + ii), col);
-                    }
-                }
+                        tile_data.set(pixel_pos_to_tic80_index(x, y), col);
             }
         }
     }

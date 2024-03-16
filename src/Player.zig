@@ -27,7 +27,7 @@ fn as_rider(ctx: *anyopaque) GameObject.IRide {
 
 const MAX_FALL_SPEED = 2;
 const MAX_FAST_FALL_SPEED = 2.6;
-const MAX_MIDAIR_SHOT = 4;
+pub const MAX_MIDAIR_SHOT = 4;
 state: State = .normal,
 t_var_jump: u32 = 0,
 t_jump_grace: u8 = 0,
