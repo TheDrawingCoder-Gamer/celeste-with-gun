@@ -69,7 +69,9 @@ blast_pos: types.Point = .{},
 blast_long: bool = false,
 // recharge timer for shots : )
 t_shot_recharge: ?u8 = null,
-
+// timing window for direction change with twirl
+t_twirl: u8 = 0,
+twirl_storage: f32 = 0,
 pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *Input, voice: *Voice) !*Player {
     var obj = GameObject.create(state, x, y);
     // obj.x += 4;
@@ -94,8 +96,7 @@ pub fn create(allocator: Allocator, state: *GameState, x: i32, y: i32, input: *I
 }
 
 fn destroy(self: *Player, allocator: Allocator) void {
-    _ = self;
-    _ = allocator;
+    allocator.destroy(self);
 }
 fn get_object(self: *Player) *GameObject {
     return &self.game_object;
@@ -150,6 +151,9 @@ fn shotgun_shot(self: *Player) void {
     shotgun_shot_dir(self, based_dir, !on_ground, 5, on_ground);
 }
 
+const LONG_SHOTGUN_LENGTH = 32;
+const SHORT_SHOTGUN_LENGTH = 16;
+
 fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_mult: f32, long: bool) void {
     self.t_shoot_cooldown = 6;
     self.t_fire_pose = 8;
@@ -158,12 +162,12 @@ fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_
     self.blast_long = long;
     const pos = blk: {
         const x: i32 = if (dir.y() != 0) -4 else switch (dir.x()) {
-            -1 => if (long) -32 else -16,
+            -1 => if (long) -LONG_SHOTGUN_LENGTH else -SHORT_SHOTGUN_LENGTH,
             1 => 8,
             else => unreachable,
         };
         const y: i32 = if (dir.x() != 0) -4 else switch (dir.y()) {
-            -1 => if (long) -32 else -16,
+            -1 => if (long) -LONG_SHOTGUN_LENGTH else -SHORT_SHOTGUN_LENGTH,
             1 => 8,
             else => unreachable,
         };
@@ -425,6 +429,9 @@ pub fn update(self: *Player) void {
     if (self.t_shot_recharge) |*r| {
         r.* -= 1;
     }
+    if (self.t_twirl > 0) {
+        self.t_twirl -= 1;
+    }
     if (self.t_platform_velocity_storage > 0)
         self.t_platform_velocity_storage -= 1;
     if (self.blast_time > 0)
@@ -433,7 +440,7 @@ pub fn update(self: *Player) void {
     self.last_accel = self.game_object.velocity().minus(self.last_velocity);
     self.last_velocity = self.game_object.velocity();
     switch (self.state) {
-        .normal => {
+        .normal => process_normal: {
             if (self.input.input_x != 0) {
                 self.game_object.facing = self.input.input_x;
             }
@@ -445,7 +452,18 @@ pub fn update(self: *Player) void {
                     self.crouching = false;
                 }
             }
-
+            if (!on_ground) {
+                // freeze for 5 frames
+                if (self.t_twirl > 5) {
+                    if (self.input.input_x != 0) {
+                        self.t_twirl = 0;
+                        const abs_twirl = std.math.sign(self.twirl_storage) * self.twirl_storage;
+                        self.game_object.speed_x = abs_twirl * @as(f32, @floatFromInt(self.input.input_x));
+                        self.twirl_storage = 0;
+                        break :process_normal;
+                    }
+                }
+            }
             var target: f32 = 0;
             var accel: f32 = 0.2;
             if (std.math.sign(self.game_object.speed_x) * self.game_object.speed_x > 2 and self.input.input_x == @as(i2, @intFromFloat(std.math.sign(self.game_object.speed_x)))) {
@@ -463,6 +481,7 @@ pub fn update(self: *Player) void {
                 accel = 0.2;
             }
             self.game_object.speed_x = approach(self.game_object.speed_x, @as(f32, @floatFromInt(self.input.input_x)) * target, accel);
+
             const fast_fall: f32 = if (self.input.input_y == 1) MAX_FAST_FALL_SPEED else MAX_FALL_SPEED;
             if (self.input.input_x != 0) {
                 sliding = self.game_object.check_solid(self.input.input_x, 0);
@@ -480,6 +499,7 @@ pub fn update(self: *Player) void {
                 self.t_recharge = 0;
                 self.t_shot_recharge = null;
             } else {
+                self.t_twirl = 0;
                 if (self.dashes < self.max_dashes and self.t_recharge == 0) {
                     if (self.recharging) {
                         self.recharging = false;
@@ -517,21 +537,29 @@ pub fn update(self: *Player) void {
                     self.wall_jump(-self.input.input_x);
                 } else if (self.t_shoot_cooldown == 0) {
                     switch (self.gun) {
-                        .projectile => self.jump_shoot(),
                         .shotgun => self.shotgun_doublejump(),
+                        else => {},
                     }
                 }
             }
             if (self.input.input_gun_pressed > 0) {
-                if (self.t_shoot_cooldown == 0) {
-                    self.shoot();
+                if (on_ground) {
+                    if (self.t_shoot_cooldown == 0) {
+                        self.shoot();
+                    }
+                } else {
+                    if (self.t_twirl == 0) {
+                        self.t_twirl = 15;
+                        self.twirl_storage = self.game_object.speed_x;
+                        self.game_object.speed_x = 0;
+                        // tiny hop
+                        self.game_object.speed_y = -0.25;
+                    }
                 }
             }
             if (self.input.input_action_pressed > 0) {
                 if (self.dashes > 0) {
                     self.dash();
-                } else if (self.t_shoot_cooldown == 0 and self.gun == .projectile) {
-                    self.dash_shoot();
                 }
             }
         },
@@ -578,8 +606,10 @@ pub fn update(self: *Player) void {
     }
 
     // hack
-    _ = vtable.move_y(self, self.game_object.speed_y, @ptrCast(&on_collide_y));
-    _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
+    if (self.t_twirl == 0) {
+        _ = vtable.move_y(self, self.game_object.speed_y, @ptrCast(&on_collide_y));
+        _ = vtable.move_x(self, self.game_object.speed_x, @ptrCast(&on_collide_x));
+    }
 
     // sprite
     self.char_sliding = false;
@@ -595,7 +625,9 @@ pub fn update(self: *Player) void {
             .down => 10,
         };
     } else if (!on_ground) {
-        if (sliding) {
+        if (self.t_twirl > 0) {
+            self.spr = 20;
+        } else if (sliding) {
             self.char_sliding = true;
             self.spr = 7;
         } else {
