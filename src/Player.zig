@@ -454,14 +454,17 @@ pub fn update(self: *Player) void {
             }
             if (!on_ground) {
                 // freeze for 5 frames
-                if (self.t_twirl > 5) {
-                    if (self.input.input_x != 0) {
-                        self.t_twirl = 0;
-                        const abs_twirl = std.math.sign(self.twirl_storage) * self.twirl_storage;
-                        self.game_object.speed_x = abs_twirl * @as(f32, @floatFromInt(self.input.input_x));
-                        self.twirl_storage = 0;
-                        break :process_normal;
+
+                if (self.t_twirl != 0) {
+                    if (self.t_twirl <= 10) {
+                        if (self.input.input_x != 0) {
+                            self.t_twirl = 0;
+                            const abs_twirl = std.math.sign(self.twirl_storage) * self.twirl_storage;
+                            self.game_object.speed_x = abs_twirl * @as(f32, @floatFromInt(self.input.input_x));
+                            self.twirl_storage = 0;
+                        }
                     }
+                    break :process_normal;
                 }
             }
             var target: f32 = 0;
@@ -553,7 +556,7 @@ pub fn update(self: *Player) void {
                         self.twirl_storage = self.game_object.speed_x;
                         self.game_object.speed_x = 0;
                         // tiny hop
-                        self.game_object.speed_y = -0.25;
+                        self.game_object.speed_y = @min(-0.25, self.game_object.speed_y);
                     }
                 }
             }
