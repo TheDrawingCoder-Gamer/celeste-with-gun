@@ -193,8 +193,7 @@ fn shotgun_shot_dir(self: *Player, dir: types.CardinalDir, do_momentum: bool, y_
 fn shotgun_doublejump(self: *Player) void {
     _ = self.input.consume_jump_press();
     if (self.midair_shot_count == 0) return;
-    self.shotgun_shot_dir(.down, true, 4 + @as(f32, @floatFromInt(self.midair_shot_count)) / 2, true);
-    self.midair_shot_count = 0;
+    self.shotgun_shot_dir(.down, true, 4 + 1.5, true);
 }
 
 fn add_shot_momentum(self: *Player, x: i2, y: i2) void {
@@ -224,6 +223,24 @@ fn add_shot_momentum_raw(self: *Player, comptime block_downwards: bool, comptime
 
     // Ignore direction to not completely break ggoing FASAT!
     self.game_object.speed_x += x_off;
+}
+fn twirl(self: *Player) void {
+    _ = self.input.consume_gun_press();
+    if (self.midair_shot_count == 0) return;
+    self.midair_shot_count -= 1;
+    self.t_twirl = 15;
+    self.twirl_storage = self.game_object.speed_x;
+    self.game_object.speed_x = 0;
+    self.game_object.speed_y = @min(0, self.game_object.speed_y);
+    self.game_object.game_state.shot_hitbox(.{ .x = self.game_object.x - 12, .y = self.game_object.y - 12, .w = 32, .h = 32 }, 100);
+    self.voice.play(9, .{ .volume = 5 });
+}
+fn release_twirl(self: *Player, dir: i2) void {
+    if (dir == 0) return;
+    const good_mag = std.math.sign(self.twirl_storage) * self.twirl_storage;
+    self.game_object.speed_x = good_mag * @as(f32, @floatFromInt(dir));
+    self.twirl_storage = 0;
+    self.t_twirl = 0;
 }
 fn shoot_dir(self: *Player, x: i2, y: i2, ttl: i32) void {
     const dir: Bullet.Direction = blk: {
@@ -458,10 +475,7 @@ pub fn update(self: *Player) void {
                 if (self.t_twirl != 0) {
                     if (self.t_twirl <= 10) {
                         if (self.input.input_x != 0) {
-                            self.t_twirl = 0;
-                            const abs_twirl = std.math.sign(self.twirl_storage) * self.twirl_storage;
-                            self.game_object.speed_x = abs_twirl * @as(f32, @floatFromInt(self.input.input_x));
-                            self.twirl_storage = 0;
+                            self.release_twirl(self.input.input_x);
                         }
                     }
                     break :process_normal;
@@ -552,11 +566,7 @@ pub fn update(self: *Player) void {
                     }
                 } else {
                     if (self.t_twirl == 0) {
-                        self.t_twirl = 15;
-                        self.twirl_storage = self.game_object.speed_x;
-                        self.game_object.speed_x = 0;
-                        // tiny hop
-                        self.game_object.speed_y = @min(-0.25, self.game_object.speed_y);
+                        self.twirl();
                     }
                 }
             }
@@ -872,6 +882,10 @@ fn clamp_mag_high(x: i32, magnitude: i32) i32 {
 }
 pub fn draw(self: *Player) void {
     const obj = self.get_object();
+    if (self.t_twirl > 5) {
+        tic80.PALETTE_MAP.color1 = 4;
+        self.game_object.game_state.draw_sprite(sheets.shotgun_blast.items[3], obj.x - 12, obj.y - 12, .{});
+    }
     dash_palette(self.input.player, self.dashes, self.recharging);
     defer reset_pallete();
     defer tdraw.set4bpp();
@@ -904,6 +918,7 @@ pub fn draw(self: *Player) void {
             },
         });
     };
+
     tdraw.set2bpp();
     const facing: tic80.Flip = if ((obj.facing != 1) != (self.char_sliding)) .horizontal else .no;
     if (self.state == .dash or self.dashes == 0) {
