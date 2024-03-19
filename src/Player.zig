@@ -25,9 +25,28 @@ fn as_rider(ctx: *anyopaque) GameObject.IRide {
     return .{ .ctx = ctx, .table = &rider_vtable };
 }
 
-const MAX_FALL_SPEED = 2;
-const MAX_FAST_FALL_SPEED = 2.6;
-pub const MAX_MIDAIR_SHOT = 4;
+const MAX_FALL_SPEED = 1.4;
+const MAX_FAST_FALL_SPEED = 1.8;
+const GRAVITY = 0.8;
+// the gravity at the highpoint of a jump. when speed is within the FLOAT_THRESHOLD magnitude
+const FLOAT_GRAVITY = 0.2;
+const FLOAT_THRESHOLD = 0.2;
+pub const MAX_MIDAIR_SHOT: comptime_int = 4;
+const DASH_SPEED = 3;
+// the speed of the dash after the speed is capped.
+const END_DASH_SPEED = 2;
+const WALL_BOUNCE_SPEED = -4;
+const WALL_BOUNCE_HORZ_SPEED = 2;
+const DASH_JUMP_SPEED = -2;
+const DASH_JUMP_HORZ_MULT = 0.5;
+const WALL_JUMP_HORZ_SPEED = 3;
+const WALL_JUMP_VERT_SPEED = -3;
+
+const JUMP_SPEED = -2.5;
+const JUMP_HORZ_SPEED_MULT = 0.2;
+
+const WALK_SPEED = 1;
+const SUPER_DASH_SPEED = 3;
 state: State = .normal,
 t_var_jump: u32 = 0,
 t_jump_grace: u8 = 0,
@@ -47,7 +66,6 @@ gun: Gun = .shotgun,
 t_dash_time: u8 = 0,
 dashes: u8 = 1,
 max_dashes: u8 = 1,
-host: bool = false,
 // doesn't affect hitbox, only used for detecting wave and hyper dashes
 crouching: bool = false,
 down_dash: bool = false,
@@ -212,8 +230,9 @@ fn add_shot_momentum_raw(self: *Player, comptime block_downwards: bool, comptime
             if (self.game_object.speed_y >= 0) {
                 self.game_object.speed_y = y_off;
                 break :y_off_blk;
-                // if already going real fast, cap the speed
             } else if (self.game_object.speed_y <= -5) {
+                // if already going real fast, cap the speed
+                // TODO: possible to nerf speed cap?
                 self.game_object.speed_y = @min(self.game_object.speed_y, @max(self.game_object.speed_y + y_off, -5));
             }
         }
@@ -299,9 +318,9 @@ fn make_shockwave(self: *Player, dir: types.CardinalDir) void {
 fn raw_jump(self: *Player, play_sound: bool) bool {
     _ = self.input.consume_jump_press();
     self.state = .normal;
-    self.game_object.speed_y = -3;
-    self.var_jump_speed = -3;
-    self.game_object.speed_x += @as(f32, @floatFromInt(self.input.input_x)) * 0.2;
+    self.game_object.speed_y = JUMP_SPEED;
+    self.var_jump_speed = JUMP_SPEED;
+    self.game_object.speed_x += @as(f32, @floatFromInt(self.input.input_x)) * JUMP_HORZ_SPEED_MULT;
     self.t_var_jump = 4;
     self.t_jump_grace = 0;
     self.auto_var_jump = false;
@@ -318,7 +337,7 @@ fn jump(self: *Player) void {
 }
 
 fn super_dash(self: *Player, recover: bool) void {
-    self.game_object.speed_x = std.math.sign(self.game_object.speed_x) * 3;
+    self.game_object.speed_x = std.math.sign(self.game_object.speed_x) * SUPER_DASH_SPEED;
     _ = self.raw_jump(false);
     if (recover) {
         self.refill_dashes();
@@ -329,9 +348,9 @@ fn super_dash(self: *Player, recover: bool) void {
 fn dash_jump(self: *Player, recover: bool) void {
     _ = self.input.consume_jump_press();
     self.state = .normal;
-    self.game_object.speed_y = -2;
-    self.var_jump_speed = -2;
-    self.game_object.speed_x += @as(f32, @floatFromInt(self.input.input_x)) * 0.5;
+    self.game_object.speed_y = JUMP_SPEED;
+    self.var_jump_speed = JUMP_SPEED;
+    self.game_object.speed_x += @as(f32, @floatFromInt(self.input.input_x)) * DASH_JUMP_HORZ_MULT;
     self.t_var_jump = 4;
     self.t_jump_grace = 0;
     self.auto_var_jump = false;
@@ -346,14 +365,14 @@ fn dash_jump(self: *Player, recover: bool) void {
 fn wall_bounce(self: *Player, dir: i2) void {
     _ = self.input.consume_jump_press();
     self.state = .normal;
-    self.game_object.speed_y = -5;
-    self.var_jump_speed = -5;
+    self.game_object.speed_y = WALL_BOUNCE_SPEED;
+    self.var_jump_speed = WALL_BOUNCE_SPEED;
     // =, not +=
-    self.game_object.speed_x = @as(f32, @floatFromInt(dir)) * -2;
+    self.game_object.speed_x = @as(f32, @floatFromInt(dir)) * -WALL_BOUNCE_HORZ_SPEED;
     self.t_var_jump = 4;
     self.auto_var_jump = false;
     self.game_object.facing = -dir;
-    _ = vtable.move_x(self, @floatFromInt(-@as(i32, dir) * 3), null);
+    _ = vtable.move_x(self, @floatFromInt(-@as(i32, dir) * WALL_BOUNCE_HORZ_SPEED), null);
     self.voice.play(2, .{ .volume = 5 });
 }
 
@@ -364,13 +383,13 @@ fn reset_dash_info(self: *Player) void {
 fn wall_jump(self: *Player, dir: i2) void {
     _ = self.input.consume_jump_press();
     self.state = .normal;
-    self.game_object.speed_y = -3;
-    self.var_jump_speed = -3;
-    self.game_object.speed_x = @floatFromInt(3 * @as(i32, dir));
+    self.game_object.speed_y = WALL_JUMP_VERT_SPEED;
+    self.var_jump_speed = WALL_JUMP_VERT_SPEED;
+    self.game_object.speed_x = @floatFromInt(WALL_JUMP_HORZ_SPEED * @as(i32, dir));
     self.t_var_jump = 4;
     self.auto_var_jump = false;
     self.game_object.facing = dir;
-    _ = vtable.move_x(self, @floatFromInt(-@as(i32, dir) * 3), null);
+    _ = vtable.move_x(self, @floatFromInt(-@as(i32, dir) * WALL_JUMP_HORZ_SPEED), null);
     self.voice.play(5, .{ .volume = 5 });
 }
 
@@ -389,13 +408,13 @@ fn dash(self: *Player) void {
     const x_speed: f32 =
         if (x_dir != 0 and @as(i2, @intFromFloat(std.math.sign(self.game_object.speed_x))) == x_dir)
         if (x_dir == 1)
-            @max(4, self.game_object.speed_x)
+            @max(DASH_SPEED, self.game_object.speed_x)
         else
-            @min(-4, self.game_object.speed_y)
+            @min(-DASH_SPEED, self.game_object.speed_y)
     else
-        4 * @as(f32, @floatFromInt(x_dir));
+        DASH_SPEED * @as(f32, @floatFromInt(x_dir));
     self.game_object.speed_x = x_speed;
-    self.game_object.speed_y = @as(f32, @floatFromInt(self.input.input_y)) * 4;
+    self.game_object.speed_y = @as(f32, @floatFromInt(self.input.input_y)) * DASH_SPEED;
 
     if (self.input.input_y < 0) {
         self.t_jump_grace = 0;
@@ -409,8 +428,8 @@ fn dash(self: *Player) void {
 fn end_dash(self: *Player) void {
     self.state = .normal;
     if (!self.down_dash) {
-        self.game_object.speed_x = 2 * std.math.sign(self.game_object.speed_x);
-        self.game_object.speed_y = 2 * std.math.sign(self.game_object.speed_y);
+        self.game_object.speed_x = END_DASH_SPEED * std.math.sign(self.game_object.speed_x);
+        self.game_object.speed_y = END_DASH_SPEED * std.math.sign(self.game_object.speed_y);
     }
 }
 pub fn die(self: *Player) void {
@@ -444,15 +463,18 @@ pub fn update(self: *Player) void {
     if (self.t_recharge > 0)
         self.t_recharge -= 1;
     if (self.t_shot_recharge) |*r| {
-        r.* -= 1;
+        if (r.* > 0) {
+            r.* -= 1;
+        }
     }
     if (self.t_twirl > 0) {
         self.t_twirl -= 1;
     }
     if (self.t_platform_velocity_storage > 0)
         self.t_platform_velocity_storage -= 1;
-    if (self.blast_time > 0)
+    if (self.blast_time > 0) {
         self.blast_time -= 1;
+    }
     var sliding = false;
     self.last_accel = self.game_object.velocity().minus(self.last_velocity);
     self.last_velocity = self.game_object.velocity();
@@ -484,32 +506,31 @@ pub fn update(self: *Player) void {
             var target: f32 = 0;
             var accel: f32 = 0.2;
             if (std.math.sign(self.game_object.speed_x) * self.game_object.speed_x > 2 and self.input.input_x == @as(i2, @intFromFloat(std.math.sign(self.game_object.speed_x)))) {
-                target = 1;
+                target = WALK_SPEED;
                 accel = 0.05;
             } else if (on_ground) {
-                target = 1;
+                target = WALK_SPEED;
                 if (self.crouching) {
                     accel = 0.25;
                 } else {
                     accel = 0.4;
                 }
             } else if (self.input.input_x != 0) {
-                target = 1;
+                target = WALK_SPEED;
                 accel = 0.2;
             }
             self.game_object.speed_x = approach(self.game_object.speed_x, @as(f32, @floatFromInt(self.input.input_x)) * target, accel);
 
-            const fast_fall: f32 = if (self.input.input_y == 1) MAX_FAST_FALL_SPEED else MAX_FALL_SPEED;
+            const max_fall: f32 = if (self.input.input_y == 1) MAX_FAST_FALL_SPEED else MAX_FALL_SPEED;
             if (self.input.input_x != 0) {
                 sliding = self.game_object.check_solid(self.input.input_x, 0);
             }
-            const slide_penalty: f32 = if (sliding) 1 else 0;
-            const max_fall = fast_fall - slide_penalty;
+            const slide_penalty: f32 = if (sliding) 0.8 else 1;
 
-            if (std.math.sign(self.game_object.speed_y) * self.game_object.speed_y < 0.2 and self.input.input_jump) {
-                self.game_object.speed_y = @min(self.game_object.speed_y + 0.2, max_fall);
+            if (std.math.sign(self.game_object.speed_y) * self.game_object.speed_y < FLOAT_THRESHOLD and self.input.input_jump) {
+                self.game_object.speed_y = @min(self.game_object.speed_y + FLOAT_GRAVITY, max_fall) * slide_penalty;
             } else {
-                self.game_object.speed_y = @min(self.game_object.speed_y + 0.8, max_fall);
+                self.game_object.speed_y = @min(self.game_object.speed_y + GRAVITY, max_fall) * slide_penalty;
             }
             if (!on_ground) {
                 self.recharging = false;
