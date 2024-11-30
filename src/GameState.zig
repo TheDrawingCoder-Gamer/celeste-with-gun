@@ -183,7 +183,20 @@ pub fn loop(self: *GameState) void {
 
 fn draw_overlay(self: *GameState) void {
     if (self.player) |player| {
-        sheets.bullet_ui.items[player.midair_shot_count].draw(2, tic.HEIGHT - 18, .{});
+        sheets.bullet_ui.items[0].draw(2, tic.HEIGHT - 18, .{});
+        if (player.midair_shot_count > 0) {
+            for (0..player.midair_shot_count) |i| {
+                if (i < 4) {
+                    sheets.bullet_ui.items[8].draw(@intCast(3 + 3 * i), tic.HEIGHT - 18, .{});
+                } else {
+                    const old_palette = tic.PALETTE_MAP_u8.*;
+                    tic.PALETTE_MAP.color13 = 2;
+                    tic.PALETTE_MAP.color14 = 1;
+                    sheets.bullet_ui.draw(8, @intCast(6 + 3 * i), tic.HEIGHT - 18, .{});
+                    tic.PALETTE_MAP_u8.* = old_palette;
+                }
+            }
+        }
     }
 }
 

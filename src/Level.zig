@@ -119,8 +119,8 @@ pub fn init(self: *Level) !void {
             .checkpoint => {
                 _ = try Checkpoint.create(self.state.allocator, self.state, @divFloor(entity.x, 8), @divFloor(entity.y, 8));
             },
-            .ammo_crystal => {
-                _ = try AmmoCrystal.create(self.state, entity.x, entity.y);
+            .ammo_crystal => |a| {
+                _ = try AmmoCrystal.create(self.state, entity.x, entity.y, a);
             },
         }
     }

@@ -104,7 +104,7 @@ fn update(ctx: *anyopaque) void {
     switch (self.state) {
         .idle => {},
         .advancing => {
-            self.lerp = types.approach(self.lerp, 1, 2.0 * self.speed / 60.0);
+            self.lerp = types.approach(self.lerp, 1, 1.5 * self.speed / 60.0);
             if (self.lerp == 1.0) {
                 self.stall();
             }
@@ -116,7 +116,7 @@ fn update(ctx: *anyopaque) void {
             Solid.move_to_point_once(self.as_table(), res);
         },
         .retreating => {
-            self.lerp = types.approach(self.lerp, 0, 0.5 / 60.0);
+            self.lerp = types.approach(self.lerp, 0, 0.3 / 60.0);
             if (self.lerp == 0.0) {
                 self.stop();
             } else {

@@ -58,19 +58,23 @@ pub fn main() !void {
                 defer file.close();
                 var i: usize = 0;
                 while (i < 16) : (i += 1) {
-                    var buf = [_]u8 {0} ** 8;
+                    var buf = [_]u8{0} ** 8;
                     const res = file.reader().readUntilDelimiter(&buf, '\n') catch |err| switch (err) {
-                       error.EndOfStream => break,
-                       else => return err,
+                        error.EndOfStream => break,
+                        else => return err,
                     };
                     if (res.len < 6) continue;
-                    palette[i] = tatl.RGBA { .r = try std.fmt.parseUnsigned(u8, res[0..2], 16), .g = try std.fmt.parseUnsigned(u8, res[2..4], 16), .b = try std.fmt.parseUnsigned(u8, res[4..6], 16), .a = 255, };
+                    palette[i] = tatl.RGBA{
+                        .r = try std.fmt.parseUnsigned(u8, res[0..2], 16),
+                        .g = try std.fmt.parseUnsigned(u8, res[2..4], 16),
+                        .b = try std.fmt.parseUnsigned(u8, res[4..6], 16),
+                        .a = 255,
+                    };
                 }
 
                 while (i < 16) : (i += 1) {
-                    palette[i] = tatl.RGBA { .r = 0, .g = 0, .b = 0, .a = 0 };
+                    palette[i] = tatl.RGBA{ .r = 0, .g = 0, .b = 0, .a = 0 };
                 }
-
             }
             var files = try std.fs.openFileAbsolute(listpath, .{});
             defer files.close();
@@ -146,7 +150,7 @@ pub fn main() !void {
 fn convert_palette(pal: [16]tatl.RGBA) std.PackedIntArray(u24, 16) {
     var res = std.PackedIntArray(u24, 16).initAllTo(0);
 
-    for (pal,0..) |col, i| {
+    for (pal, 0..) |col, i| {
         res.set(i, compress_color(col));
     }
     return res;
@@ -366,7 +370,20 @@ fn process_entity(world_pos: math.Point, o_entities: *std.ArrayList(SavedLevel.E
     } else if (std.mem.eql(u8, entity.__identifier, "Checkpoint")) {
         kind = .checkpoint;
     } else if (std.mem.eql(u8, entity.__identifier, "AmmoCrystal")) {
-        kind = .ammo_crystal;
+        var bullets: ?u8 = null;
+        for (entity.fieldInstances) |field| {
+            if (std.mem.eql(u8, field.__identifier, "bulletcount")) {
+                switch (field.__value) {
+                    .null => {},
+                    .integer => |a| {
+                        bullets = @intCast(a);
+                    },
+                    else => return error.UnexpectedData,
+                }
+                break;
+            }
+        }
+        kind = .{ .ammo_crystal = bullets };
     }
 
     if (kind) |k| {
@@ -471,8 +488,6 @@ fn extract_packed(input_f: std.fs.File) ![]u8 {
     @memcpy(out_data, good_data[0..final_len]);
     return out_data;
 }
-
-
 
 // don't ask...
 inline fn minus(comptime T: type, a: T, b: T) T {
@@ -795,8 +810,8 @@ fn packinator(root_dir: std.fs.Dir, in_file: std.fs.File, tiles: tatl.AsepriteIm
         const cel = tiles.frames[0].cels[0];
         for (0..128) |x| {
             for (0..128) |y| {
-                        const col = try pal_color_at(tiles.color_depth, tiles.palette, cel, x, y, .four) orelse 0;
-                        tile_data.set(pixel_pos_to_tic80_index(x, y), col);
+                const col = try pal_color_at(tiles.color_depth, tiles.palette, cel, x, y, .four) orelse 0;
+                tile_data.set(pixel_pos_to_tic80_index(x, y), col);
             }
         }
     }

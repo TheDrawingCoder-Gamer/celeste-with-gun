@@ -11,7 +11,7 @@
 	"iid": "365da550-d7b0-11ee-be0e-69618916ec9c",
 	"jsonVersion": "1.5.3",
 	"appBuildId": 473703,
-	"nextUid": 253,
+	"nextUid": 255,
 	"identifierStyle": "Capitalize",
 	"toc": [],
 	"worldLayout": "Free",
@@ -3255,7 +3255,45 @@
 			"limitBehavior": "MoveLastOne",
 			"pivotX": 0,
 			"pivotY": 0,
-			"fieldDefs": []
+			"fieldDefs": [
+				{
+					"identifier": "bulletcount",
+					"doc": null,
+					"__type": "Int",
+					"uid": 254,
+					"type": "F_Int",
+					"isArray": false,
+					"canBeNull": true,
+					"arrayMinLength": null,
+					"arrayMaxLength": null,
+					"editorDisplayMode": "Hidden",
+					"editorDisplayScale": 1,
+					"editorDisplayPos": "Above",
+					"editorLinkStyle": "StraightArrow",
+					"editorDisplayColor": null,
+					"editorAlwaysShow": false,
+					"editorShowInWorld": true,
+					"editorCutLongValues": true,
+					"editorTextSuffix": null,
+					"editorTextPrefix": null,
+					"useForSmartColor": false,
+					"exportToToc": false,
+					"searchable": false,
+					"min": 0,
+					"max": null,
+					"regex": null,
+					"acceptFileTypes": null,
+					"defaultOverride": null,
+					"textLanguageMode": null,
+					"symmetricalRef": false,
+					"autoChainRef": true,
+					"allowOutOfLevelRef": true,
+					"allowedRefs": "OnlySame",
+					"allowedRefsEntityUid": null,
+					"allowedRefTags": [],
+					"tilesetUid": null
+				}
+			]
 		}
 	], "tilesets": [
 		{
@@ -5046,7 +5084,7 @@
 					"entityInstances": [
 						{
 							"__identifier": "Switch",
-							"__grid": [13,12],
+							"__grid": [9,12],
 							"__pivot": [0,0],
 							"__tags": [],
 							"__tile": null,
@@ -5055,7 +5093,7 @@
 							"width": 24,
 							"height": 24,
 							"defUid": 46,
-							"px": [104,96],
+							"px": [72,96],
 							"fieldInstances": [
 								{ "__identifier": "kind", "__type": "Int", "__value": 0, "__tile": null, "defUid": 47, "realEditorValues": [] },
 								{ "__identifier": "can_shoot", "__type": "Bool", "__value": true, "__tile": null, "defUid": 59, "realEditorValues": [{
@@ -5067,7 +5105,7 @@
 									"params": [ false ]
 								}] }
 							],
-							"__worldX": 584,
+							"__worldX": 552,
 							"__worldY": 96
 						},
 						{
@@ -8313,7 +8351,7 @@
 							"height": 8,
 							"defUid": 252,
 							"px": [368,64],
-							"fieldInstances": [],
+							"fieldInstances": [{ "__identifier": "bulletcount", "__type": "Int", "__value": 99, "__tile": null, "defUid": 254, "realEditorValues": [{ "id": "V_Int", "params": [99] }] }],
 							"__worldX": 608,
 							"__worldY": 200
 						}
